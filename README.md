@@ -1,395 +1,300 @@
-# 🏗️ OCI Inventory MCP Server
+# OCI Inventory MCP
 
-> A containerised **Model Context Protocol (MCP) server** that exposes Oracle Cloud Infrastructure (OCI) resource scanning as AI-callable tools — enabling Claude Desktop, Oracle Code Assist (OCA), and other MCP-capable AI clients to query your tenancy in natural language.
+*A Model Context Protocol server that scans your Oracle Cloud Infrastructure tenancy and renders an interactive inventory dashboard inside Claude.*
 
----
+![Python](https://img.shields.io/badge/python-3.12-blue.svg)
+![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![MCP](https://img.shields.io/badge/MCP-compatible-8A2BE2.svg)
 
-## 📋 Table of Contents
-
-- [What It Does](#-what-it-does)
-- [How It Works (MCP Context)](#-how-it-works-mcp-context)
-- [Architecture](#-architecture)
-- [Prerequisites](#-prerequisites)
-- [Known Issues & Fixes](#%EF%B8%8F-known-issues--fixes)
-- [Deployment Steps](#-deployment-steps)
-- [OCI Config Setup](#-oci-config-setup)
-- [Client Configuration](#-client-configuration)
-  - [Claude Desktop](#claude-desktop)
-  - [Oracle Code Assist (OCA)](#oracle-code-assist-oca)
-- [Available Tools](#-available-tools)
-- [Testing](#-testing)
-- [Debugging & Logs](#-debugging--logs)
-- [OCI Authentication Notes](#-oci-authentication-notes)
-- [Oracle Documentation References](#-oracle-documentation-references)
+<!-- TODO: LICENSE file in this repo is currently Unlicense (public domain), not MIT.
+           Update LICENSE to MIT to match this badge, or change the badge. -->
 
 ---
 
-## 🔍 What It Does
+## What is it?
 
-The OCI Inventory MCP Server connects your AI client directly to your Oracle Cloud tenancy. Instead of logging into the OCI Console or writing scripts, you can ask Claude (or any MCP-capable model) questions like:
+**OCI Inventory MCP** is a [FastMCP](https://github.com/modelcontextprotocol/python-sdk) server that exposes Oracle Cloud Infrastructure resource scanning as a set of MCP tools. It runs over Streamable HTTP, supports Resource Principal, Instance Principal and `~/.oci/config` authentication, and is packaged for OCI Generative AI Hosted Deployments, OCI Container Instances / VMs, or local development.
 
-> *"What services are running in my us-chicago-1 region?"*  
-> *"List all compartments in my tenancy."*  
-> *"Summarise resources grouped by service across all regions."*
+When connected to Claude, the server feeds live tenancy data into the bundled [`oci-tenancy-dashboard`](chats/skills/oci-tenancy-dashboard.skill) skill, which renders a dark-themed, sortable, filterable inventory dashboard — grouped by service, with region tags, compartment filter buttons and direct links into the Oracle Architecture Center for every service in use.
 
-The server translates those requests into OCI SDK calls and returns structured inventory data — all without leaving your chat session.
+## Screenshot
 
----
+![OCI Inventory Dashboard](images/image1.png)
 
-## 🧠 How It Works (MCP Context)
+## Quick Start — Get Your OCI Dashboard in 3 Steps
 
-```
-┌─────────────────────┐        SSE / HTTP         ┌──────────────────────────┐
-│  AI Client          │ ◄────────────────────────► │  OCI Inventory MCP Server│
-│  (Claude Desktop /  │   MCP Protocol (JSON-RPC)  │  FastMCP + OCI Python SDK│
-│   OCA / claude.ai)  │                            │  Docker Container        │
-└─────────────────────┘                            └──────────┬───────────────┘
-                                                              │  OCI API calls
-                                                              ▼
-                                                   ┌──────────────────────────┐
-                                                   │  Oracle Cloud            │
-                                                   │  Infrastructure (OCI)    │
-                                                   │  REST APIs               │
-                                                   └──────────────────────────┘
-```
+1. **Clone & configure**
 
-**MCP (Model Context Protocol)** is an open standard that lets AI models call external tools via a structured JSON-RPC interface. This server implements the MCP spec using **[FastMCP](https://github.com/jlowin/fastmcp)** and exposes tools over **SSE (Server-Sent Events)** transport — the recommended transport for network-accessible MCP servers.
+   ```bash
+   git clone https://github.com/your-org/oci-inventory-mcp.git
+   cd oci-inventory-mcp/hosted_app
+   # Edit deploy_config.yaml — fill in tenancy_id, compartment_id,
+   # identity_domain.url, container.tenancy_namespace, container.username.
+   ```
 
-When Claude receives a natural-language query about your OCI environment, it:
-1. Selects the appropriate MCP tool
-2. Sends a JSON-RPC `tools/call` request to this server
-3. The server executes the OCI SDK call using your local `~/.oci/config` credentials
-4. Results are returned to Claude, which synthesises a human-readable response
+2. **Build, push and deploy**
 
----
+   ```bash
+   python deploy.py
+   ```
 
-## 🏛️ Architecture
+   This builds the container in [container/](container/), pushes it to OCIR, creates the Identity Domain OAuth app, IAM dynamic group + policy, and a GenAI Hosted Application + Deployment. To run the server locally instead:
 
-```
-oci_hosted_mcp/
-├── container/
-│   ├── Dockerfile           # Container build for MCP server
-│   ├── requirements.txt     # Python dependencies (fastmcp, oci, etc.)
-│   └── server.py            # FastMCP server — tool definitions & OCI SDK calls
-├── hosted_app/
-│   ├── deploy.py            # Deployment script
-│   ├── deploy_config.yaml   # Deployment configuration
-│   ├── deploy_output.json   # Deployment output (gitignored)
-│   ├── destroy.py           # Destroy script
-│   └── get_token.py         # Token management
-├── chats/
-│   ├── claude/              # Claude integration scripts
-│   │   └── claude_wrapper.sh  # Wrapper script (gitignored)
-│   └── cline/               # Cline integration settings
-│       └── cline_mcp_settings.json # Cline MCP settings (gitignored)
-├── backup/                  # Backup scripts and configs (gitignored)
-├── images/                  # Architecture and usage diagrams
-├── .venv/                   # Python virtual environment (gitignored)
-├── .gitignore               # Git ignore rules
-└── README.md                # Project documentation
-```
+   ```bash
+   docker build -t oci-inventory-mcp ./container
+   docker run --rm -p 8080:8080 \
+     -e OCI_AUTH=auto \
+     -v ~/.oci:/home/mcpuser/.oci:ro \
+     oci-inventory-mcp
+   ```
 
-**Container user:** `mcpuser` (non-root, UID 1000)
-**Transport:** SSE on `http://localhost:8000/sse`
-**Runtime:** Docker via Colima (macOS)
+   <!-- TODO: No docker-compose.yml is present in the repo. Add one if a compose-based
+              workflow is desired, or remove this note. -->
 
----
+3. **Ask Claude**
 
-## ✅ Prerequisites
+   After the deployment is live, fetch a bearer token and register the SSE endpoint with Claude:
 
-| Requirement | Notes |
-|---|---|
-| [Colima](https://github.com/abiosoft/colima) | macOS container runtime (not Docker Desktop) |
-| `docker` + `docker-compose` CLI | Hyphenated `docker-compose`, not the plugin syntax |
-| OCI account with API key | See [OCI Auth docs](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm) |
-| OCI CLI config (`~/.oci/config`) | Generated via `oci setup config` |
-| Python 3.11+ (for local dev only) | Container handles runtime |
+   ```bash
+   python get_token.py --setup-claude --test
+   ```
 
----
+   Then paste this prompt into Claude:
 
-## ⚠️ Known Issues & Fixes
+   > Scan my OCI tenancy across ap-melbourne-1 and us-chicago-1 and generate the
+   > interactive dashboard — include compartment filters and Oracle Architecture
+   > Center links.
 
-### 🐛 OCI Config Path Mismatch
+   ![Dashboard rendered in Claude](images/image2.png)
 
-**Symptom:** Tools authenticate but can't find `~/.oci/config` inside the container.
+## Example Prompts
 
-**Root cause:** The `mcpuser` was created with home directory `-d /app`:
+<!-- TODO: examples/ currently contains a rendered dashboard artifact
+           (oci-tenancy-dashboard-20260421.html), not chat prompt files.
+           Add .md or .txt prompt samples to examples/ to populate this section. -->
 
-```dockerfile
-# ❌ Current — home resolves to /app
-RUN useradd -m -d /app -s /bin/bash mcpuser
+The prompts below exercise different tools in the server.
+
+**Full multi-region scan with dashboard render**
+
+```text
+Scan my OCI tenancy across ap-melbourne-1 and us-chicago-1 and generate the
+interactive dashboard — include compartment filters and Oracle Architecture
+Center links.
 ```
 
-This means `os.path.expanduser("~/.oci/config")` → `/app/.oci/config`  
-But `docker-compose.yml` mounts the OCI config to `/home/mcpuser/.oci` — a **mismatch**.
+**Service-level summary for architecture review**
 
-**Fix Option A — Correct the Dockerfile (recommended):**
-
-```dockerfile
-# ✅ Fix: use standard home directory
-RUN useradd -m -d /home/mcpuser -s /bin/bash mcpuser
+```text
+Use get_services_summary to list every OCI service I'm currently using,
+then map each one to the most relevant Oracle Architecture Center reference
+architecture.
 ```
 
-Then rebuild:
-```bash
-docker-compose down
-docker-compose up --build
+**Find unclassified resource types**
+
+```text
+Run get_unknown_resource_types against ap-sydney-1 and report any
+resource types that aren't in the built-in service mapping.
 ```
 
-**Fix Option B — Change the volume mount in `docker-compose.yml`:**
+A previously generated dashboard is checked in at [examples/oci-tenancy-dashboard-20260421.html](examples/oci-tenancy-dashboard-20260421.html) for reference.
 
-```yaml
-volumes:
-  - ~/.oci:/app/.oci:ro    # match what expanduser("~/.oci") resolves to
+## Available MCP Tools
+
+Defined in [container/server.py](container/server.py).
+
+| Tool | Description | Key Parameters |
+|---|---|---|
+| `list_subscribed_regions` | List all regions subscribed in the OCI tenancy. | *(none)* |
+| `list_compartments` | List every compartment in the tenancy with OCID + name. | *(none)* |
+| `scan_region` | Scan a single OCI region and return all resources, grouped by service. | `region` *(required, e.g. `ap-sydney-1`)* |
+| `scan_tenancy` | Scan all (or specified) OCI regions and return a full resource summary. | `regions` *(optional, comma-separated)* |
+| `get_services_summary` | Deduplicated summary of OCI services in use, grouped by service → regions → compartments. Optimised as input for Architecture Center lookups. | `regions` *(optional, comma-separated)* |
+| `get_unknown_resource_types` | Scan a region and return any resource types not in the built-in service classification map. | `region` *(required)* |
+
+## Skills
+
+Drop these `.skill` files into a Claude Project (Projects → Skills → Upload) to teach Claude how to use the MCP server.
+
+#### oci-tenancy-dashboard
+
+Builds the interactive HTML dashboard visualising OCI tenancy resources pulled live from the connected OCI MCP server. Triggers on phrases like *"show my OCI resources"*, *"what's in my tenancy"*, *"OCI inventory"*, *"scan my tenancy"*.
+
+```text
+chats/skills/oci-tenancy-dashboard.skill
 ```
 
----
+#### orcl-docs-search
 
-## 🚀 Deployment Steps
+Forces live Oracle web-search lookups for any Oracle product, documentation, architecture, pricing, customer or contract question — used by the dashboard skill to resolve Architecture Center links per service.
 
-### 1. Start Colima
+```text
+chats/skills/orcl-docs-search.skill
+```
+
+## Deployment
+
+All automation lives in [hosted_app/](hosted_app/) and is driven from [hosted_app/deploy_config.yaml](hosted_app/deploy_config.yaml). Each script is invoked as `python <script>` from inside `hosted_app/`.
+
+#### deploy.py
+
+End-to-end deploy: Docker build + push to OCIR → Identity Domain OAuth app → IAM dynamic group + policy → GenAI Hosted Application + Deployment.
 
 ```bash
-colima start
+usage: deploy.py [-h] [--config FILE] [--step STEP] [--skip-docker]
+                 [--image-only] [--skip-login] [--add-artifact]
+                 [--deployment-id OCID] [--image REGISTRY/NS/REPO] [--tag TAG]
+                 [--status] [--force-step STEP] [--reset] [--reset-step STEP]
+
+OCI MCP Server — full deploy automation (build → push → infra)
+
+options:
+  -h, --help            show this help message and exit
+  --config FILE         Path to deploy_config.yaml (default:
+                        deploy_config.yaml)
+  --step STEP           Step to run: all | docker | validate | oauth | iam |
+                        genai_app | genai_deploy
+
+Docker options:
+  --skip-docker         Skip docker build+push (image must already be in OCIR)
+  --image-only          Build+push image only — do not run any infra steps
+  --skip-login          Skip 'docker login' to OCIR (already logged in this
+                        session)
+
+Add artifact (update existing deployment):
+  --add-artifact        Push new image (unless --skip-docker) and update an
+                        existing deployment
+  --deployment-id OCID  Deployment OCID to update (reads deploy_output.json if
+                        omitted)
+  --image REGISTRY/NS/REPO
+                        Override container image path (reads
+                        deploy_config.yaml if omitted)
+  --tag TAG             Override container image tag (reads deploy_config.yaml
+                        if omitted)
+
+Resume tracking:
+  --status              Show which steps have completed then exit
+  --force-step STEP     Force re-run a specific step even if already marked
+                        complete
+  --reset               Clear all resume tracking in deploy_output.json then
+                        exit
+  --reset-step STEP     Clear resume tracking for one step then exit
+
+Steps (--step):
+  all           Docker build+push + all infra steps  (default)
+  docker        Docker build+push only
+  validate      Config + OCI connectivity check only
+  oauth         Identity Domain OAuth app
+  iam           IAM dynamic group + policy
+  genai_app     GenAI Hosted Application
+  genai_deploy  GenAI Hosted Deployment (container)
 ```
 
-### 2. Clone / navigate to your project
+**Prerequisites:** `oci`, `requests`, `pyyaml` Python packages; `docker` CLI logged into your target OCIR; a populated `deploy_config.yaml`; an OCI Auth Token (Console → Identity → Users → *your user* → Auth Tokens) for `docker login`.
+
+#### destroy.py
+
+Reverse of `deploy.py`. Tears resources down in dependency order. Defaults to dry-run — pass `--confirm` to actually delete.
 
 ```bash
-cd ~/path/to/oci-inventory
+usage: destroy.py [-h] [--config FILE] [--step STEP] [--confirm]
+                  [--delete-image]
+
+OCI MCP Server — full teardown (reverse of deploy.py)
+
+options:
+  -h, --help      show this help message and exit
+  --config FILE   Path to deploy_config.yaml (default: deploy_config.yaml)
+  --step STEP     Single step to destroy: genai_deploy | genai_app |
+                  iam_policy | iam_dg | oauth | ocir
+  --confirm       Actually delete resources (default is dry-run)
+  --delete-image  Also delete the OCIR repository and all its images
+
+Steps (--step):
+  genai_deploy  Delete GenAI Hosted Deployment
+  genai_app     Delete GenAI Hosted Application
+  iam_policy    Delete IAM Policy
+  iam_dg        Delete IAM Dynamic Group  (skipped if pre-existing)
+  oauth         Delete Identity Domain OAuth App
+  ocir          Delete OCIR repository + all images  (requires --delete-image)
 ```
 
-### 3. Verify OCI config exists on your host
+**Prerequisites:** Same as `deploy.py`. Reads OCIDs from `deploy_output.json` produced by the deploy step.
+
+#### get_token.py
+
+Fetches an OAuth bearer token from the Identity Domain confidential app, optionally tests the SSE endpoint, and writes ready-to-use Claude / Cline MCP client configs.
 
 ```bash
-ls ~/.oci/config
-cat ~/.oci/config   # should show [DEFAULT] profile with key_file, tenancy, region, etc.
+usage: get_token.py [-h] [--output OUTPUT] [--export] [--test]
+                    [--setup-claude] [--setup-cline] [--dir DIR]
+                    [--client-secret CLIENT_SECRET]
+
+options:
+  -h, --help            show this help message and exit
+  --output OUTPUT
+  --export              Print export statement
+  --test                Test SSE endpoint after getting token
+  --setup-claude        Generate claude_wrapper.sh
+  --setup-cline         Generate cline_mcp_settings.json
+  --dir DIR             Output dir override (default varies per --setup-*
+                        flag)
+  --client-secret CLIENT_SECRET
+                        Override client_secret (if not stored in
+                        deploy_output.json)
 ```
 
-### 4. Build and start the server
+**Prerequisites:** `requests`, `pyyaml` Python packages; a successful `deploy.py` run that produced `deploy_output.json` with the deployment URL and OAuth client credentials.
 
-```bash
-docker-compose up --build
+## Configuration Reference
+
+Runtime environment variables read by [container/server.py](container/server.py):
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OCI_AUTH` | No | `resource_principal` | Auth mode: `resource_principal` (Hosted Deployment), `instance_principal` (VM/Container Instance), `auto` (try RP → IP → `~/.oci/config`). |
+| `OCI_RESOURCE_PRINCIPAL_REGION` | No | *(home region of tenancy)* | Override the region the server uses for OCI API calls. |
+| `MCP_HOST` | No | `0.0.0.0` | Bind address for the local/compose entry point. |
+| `MCP_PORT` | No | `8080` | Bind port for the local/compose entry point. *(Reserved on OCI Hosted Deployment — the platform sets `PORT`.)* |
+
+Deployment-time configuration lives in [hosted_app/deploy_config.yaml](hosted_app/deploy_config.yaml) and covers `oci.*`, `identity_domain.*`, `oauth.*`, `genai_application.*`, `container.*` and `iam.*` blocks.
+
+<!-- TODO: No .env.example file is present in the repo. Add one mirroring the
+           variables in this table if a dotenv-style workflow is desired. -->
+
+## OCI Permissions
+
+The deployment's dynamic group needs the following minimum read-only permissions in the target compartment (or tenancy root for full coverage):
+
+- `Allow dynamic-group <dg-name> to inspect all-resources in tenancy`
+- `Allow dynamic-group <dg-name> to read all-resources in tenancy`
+- `Allow dynamic-group <dg-name> to inspect compartments in tenancy`
+- `Allow dynamic-group <dg-name> to inspect tenancies in tenancy`
+- `Allow dynamic-group <dg-name> to read tag-namespaces in tenancy`
+
+The `Search` service used by `scan_region` / `scan_tenancy` honours the caller's `inspect`/`read` permissions for each underlying resource type — if the dynamic group cannot inspect a service, those resources are silently omitted from results.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Claude<br/>claude.ai] -- SSE / Streamable HTTP --> B[FastMCP Server<br/>Docker container]
+    B -- OCI Python SDK --> C[OCI API]
+    subgraph Hosted["OCI GenAI Hosted Deployment"]
+        B
+    end
+    C -.-> D[(Tenancy<br/>resources)]
 ```
 
-You should see:
-```
-oci-inventory  | INFO:     Started server process
-oci-inventory  | INFO:     FastMCP SSE server running on http://0.0.0.0:8000
-oci-inventory  | INFO:     MCP endpoint: http://0.0.0.0:8000/sse
-```
+Auth flow: Claude obtains an OAuth bearer token from the Identity Domain confidential app, presents it to the GenAI Hosted Deployment ingress, which forwards the request to the container. Inside the container, the server uses the injected Resource Principal to call OCI APIs — no static credentials are stored on disk.
 
+## Contributing & License
 
-### 5. Verify the server is reachable
+Contributions are welcome. Please open an issue describing the change before sending a pull request, especially for additions to the `RESOURCE_TYPE_TO_SERVICE` map in [container/server.py](container/server.py) (use `get_unknown_resource_types` to surface gaps).
 
-```bash
-python hosted_app/get_token.py --test
-# Should print HTTP status and SSE stream headers if the server is running
-```
+Released under the MIT License. See [LICENSE](LICENSE) for details.
 
----
-
-## 🔐 OCI Config Setup
-
-If you haven't set up OCI API key auth yet:
-
-```bash
-# Install OCI CLI (if not already installed)
-brew install oci-cli
-
-# Interactive setup — generates config + key pair
-oci setup config
-```
-
-This creates `~/.oci/config` with:
-
-```ini
-[DEFAULT]
-user=ocid1.user.oc1..aaa...
-fingerprint=xx:xx:xx:...
-tenancy=ocid1.tenancy.oc1..aaa...
-region=us-chicago-1
-key_file=~/.oci/oci_api_key.pem
-```
-
-📖 **Reference:** [OCI API Key Authentication](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm)  
-📖 **Required IAM policies:** [OCI IAM Overview](https://docs.oracle.com/en-us/iaas/Content/Identity/Concepts/overview.htm)
-
----
-
-## ⚙️ Client Configuration
-
-### Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "oci-inventory": {
-      "url": "http://localhost:8000/sse",
-      "transport": "sse"
-    }
-  }
-}
-```
-
-Restart Claude Desktop. You should see the `oci-inventory` tools listed in the tool picker (🔧 icon).
-
-📖 **MCP SSE transport spec:** [MCP Specification — Transports](https://spec.modelcontextprotocol.io/specification/basic/transports/)
-
----
-
-### Oracle Code Assist (OCA)
-
-OCA supports MCP servers via its tool integration layer. Add the server to your OCA MCP config (location varies by IDE plugin version):
-
-```json
-{
-  "mcpServers": {
-    "oci-inventory": {
-      "url": "http://localhost:8000/sse",
-      "transport": "sse"
-    }
-  }
-}
-```
-
-> **⚠️ Prompt injection warning (OCA-specific):**  
-> OCA's underlying model has been observed fabricating error messages that echo content from MCP tool output strings — e.g. inventing *"OCI config not found"* errors when the tool response contains config path strings. If you see an error message that suspiciously mirrors a tool's output text, **treat it as a hallucination** and verify with container logs instead.
-
----
-
-## 🛠️ Available Tools
-
-| Tool | Description |
-|---|---|
-| `list_subscribed_regions` | Returns all regions your tenancy is subscribed to |
-| `scan_tenancy` | Broad resource scan across all subscribed regions |
-| `scan_region` | Targeted resource scan for a specific region |
-| `list_compartments` | Lists all compartments in the tenancy hierarchy |
-| `get_services_summary` | **Preferred for architecture mapping** — groups resources by service → region → compartment |
-| `get_unknown_resource_types` | Surfaces resource types not yet categorised by the server |
-
-> **Tip:** `get_services_summary` is the best tool for generating architecture dashboards and OCI Architecture Center reference lookups. Its grouping (service → region → compartment) maps cleanly to per-service reference architecture searches.
-
-📖 **OCI Resource Types:** [OCI Supported Services](https://docs.oracle.com/en-us/iaas/Content/services.htm)  
-📖 **OCI Compartments:** [Managing Compartments](https://docs.oracle.com/en-us/iaas/Content/Identity/compartments/managingcompartments.htm)
-
----
-
-## 🧪 Testing
-
-
-### Quick smoke test — list tools via MCP protocol
-
-```bash
-# Use the --test flag to check the endpoint and basic MCP protocol
-python hosted_app/get_token.py --test
-# Should print HTTP status and a sample SSE response
-```
-
-### Test a tool call directly
-
-# For custom tool calls, use an HTTP client or extend get_token.py to send specific JSON-RPC requests.
-# Example: To test list_subscribed_regions, add a test case in get_token.py or use a tool like Postman.
-
-### Test from Claude Desktop
-
-1. Open Claude Desktop
-2. Start a new chat
-3. Ask: *"Use the oci-inventory tool to list my subscribed OCI regions"*
-4. Claude should call `list_subscribed_regions` and return your region list
-
-### Test `get_services_summary`
-
-In Claude: *"Summarise all OCI resources in my tenancy grouped by service"*
-
-This triggers `get_services_summary` — the richest tool for tenancy overviews and architecture dashboards.
-
----
-
-## 🪵 Debugging & Logs
-
-### View live container logs
-
-```bash
-docker-compose logs -f
-```
-
-### Check for OCI auth errors
-
-```bash
-# Auth only runs on first tool invocation — grep AFTER calling a tool
-docker-compose logs | grep -iE "auth|config|oci|error|exception"
-```
-
-### Check which path the container resolves for OCI config
-
-```bash
-docker-compose exec oci-inventory python3 -c \
-  "import os; print(os.path.expanduser('~/.oci/config'))"
-```
-
-This reveals the effective path — if it prints `/app/.oci/config` instead of `/home/mcpuser/.oci/config`, the home directory mismatch bug is present (see [Known Issues](#-known-issues--fixes)).
-
-### Inspect running container
-
-```bash
-docker-compose exec oci-inventory /bin/bash
-ls -la ~/.oci/
-cat ~/.oci/config
-```
-
-### Full restart (clean state)
-
-```bash
-docker-compose down && docker-compose up --build
-```
-
----
-
-## 🔑 OCI Authentication Notes
-
-> **OCI SDK auth is lazy** — authentication happens on the **first tool invocation**, not at container startup. Grepping logs for auth errors is only meaningful after you've actually called a tool from your AI client.
-
-**Auth order of precedence inside the container:**
-
-1. File-based config (`~/.oci/config`) — used by this server
-2. Instance Principal (if running on OCI Compute) — not used locally
-3. Resource Principal — not used locally
-
-📖 **SDK Auth docs:** [OCI Python SDK Authentication](https://docs.oracle.com/en-us/iaas/tools/python/latest/sdk_behaviors/config.html)  
-📖 **Instance Principal (for OCI-hosted deployment):** [Instance Principal Auth](https://docs.oracle.com/en-us/iaas/Content/Identity/Tasks/callingservicesfrominstances.htm)
-
----
-
-## 📚 Oracle Documentation References
-
-| Topic | Link |
-|---|---|
-| OCI API Key setup | [docs.oracle.com — API Signing Keys](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm) |
-| OCI Python SDK | [docs.oracle.com — Python SDK](https://docs.oracle.com/en-us/iaas/tools/python/latest/) |
-| OCI SDK Config file | [docs.oracle.com — SDK Config](https://docs.oracle.com/en-us/iaas/tools/python/latest/sdk_behaviors/config.html) |
-| OCI IAM & Compartments | [docs.oracle.com — IAM Overview](https://docs.oracle.com/en-us/iaas/Content/Identity/Concepts/overview.htm) |
-| OCI Regions | [docs.oracle.com — Regions & Availability Domains](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm) |
-| OCI Supported Services | [docs.oracle.com — Services](https://docs.oracle.com/en-us/iaas/Content/services.htm) |
-| OCI Architecture Center | [docs.oracle.com — Architecture Center](https://docs.oracle.com/solutions/) |
-| Instance Principal Auth | [docs.oracle.com — Calling Services from Instances](https://docs.oracle.com/en-us/iaas/Content/Identity/Tasks/callingservicesfrominstances.htm) |
-| OCI CLI setup | [docs.oracle.com — OCI CLI Quickstart](https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) |
-| MCP Specification | [spec.modelcontextprotocol.io](https://spec.modelcontextprotocol.io/) |
-| FastMCP | [github.com/jlowin/fastmcp](https://github.com/jlowin/fastmcp) |
-
----
-
-## 🗺️ What's Next
-
-- [ ] Fix `mcpuser` home directory in Dockerfile (see [Known Issues](#%EF%B8%8F-known-issues--fixes))
-- [ ] Deploy to OCI Container Instances for persistent hosting
-- [ ] Switch from file-based auth to Instance Principal when OCI-hosted
-- [ ] Add API monetisation layer (FastAPI + Stripe + PostgreSQL) for external access
-- [ ] Extend tool coverage for additional OCI resource types flagged by `get_unknown_resource_types`
-
----
-
-*Generated from project context — OCI Inventory MCP Server (us-chicago-1 / FastMCP SSE)*
+<!-- TODO: LICENSE file currently contains Unlicense text. Replace with the
+           standard MIT License text to match this section and the badge above. -->

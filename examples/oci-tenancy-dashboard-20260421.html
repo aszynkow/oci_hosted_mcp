@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>OCI Tenancy Dashboard — ap-melbourne-1 + us-chicago-1</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
+  .stats { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat-card { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 110px; }
+  .stat-card .val { font-size: 20px; font-weight: 800; color: #e8a838; }
+  .stat-card .lbl { font-size: 10px; color: #888; margin-top: 2px; }
+  .section-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .controls { display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
+  .filter-btn { padding: 5px 11px; border-radius: 14px; border: 1px solid #333; background: #1a1d27; color: #aaa; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .filter-btn.active { background: #e8a838; color: #000; border-color: #e8a838; font-weight: 600; }
+  .comp-btn { padding: 5px 11px; border-radius: 14px; border: 1px solid #2a3a4a; background: #1a2530; color: #70a0c0; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .comp-btn.active { background: #1a3a5c; color: #90c8f0; border-color: #3a6a9a; font-weight: 600; }
+  .arch-btn { padding: 5px 11px; border-radius: 14px; border: 1px solid #2a5a3a; background: #1a2d1a; color: #60c060; font-size: 12px; cursor: pointer; }
+  .arch-btn.active { background: #1a4a2a; border-color: #50a050; color: #90e090; font-weight: 600; }
+  .search-box { flex: 1; min-width: 160px; padding: 5px 12px; border-radius: 14px; border: 1px solid #333; background: #1a1d27; color: #ddd; font-size: 12px; outline: none; }
+  .search-box::placeholder { color: #555; }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #2a2d3a; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead { background: #1a1d27; }
+  th { padding: 9px 10px; text-align: left; color: #888; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: #e8a838; }
+  th.sorted { color: #e8a838; }
+  tbody tr { border-top: 1px solid #1e2130; transition: background 0.1s; }
+  tbody tr:hover { background: #1a1d27; }
+  td { padding: 8px 10px; vertical-align: middle; }
+  .service-name { font-weight: 600; color: #fff; white-space: nowrap; }
+  .count { font-weight: 700; color: #e8a838; font-variant-numeric: tabular-nums; text-align: right; }
+  .bar-cell { width: 100px; }
+  .bar-bg { background: #1e2130; border-radius: 3px; height: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #e8a838, #f0c060); }
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: 600; white-space: nowrap; margin: 1px 2px 1px 0; }
+  .arch-link { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .arch-link.specific { background: #1a3a1a; color: #60e060; border: 1px solid #2a5a2a; }
+  .arch-link.specific:hover { background: #1e4a1e; }
+  .arch-link.search { background: #1a2a3a; color: #60b0e0; border: 1px solid #2a4a6a; }
+  .arch-link.search:hover { background: #1e3a4e; }
+  .arch-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-specific { background: #60e060; }
+  .dot-search { background: #60b0e0; }
+  .empty { text-align: center; padding: 24px; color: #555; }
+  .legend { display: flex; gap: 14px; margin-bottom: 12px; font-size: 11px; color: #888; align-items: center; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .divider { height: 1px; background: #1e2130; margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<h1>🏗 OCI Tenancy — Services + Oracle Architecture Center</h1>
+<div class="subtitle" id="subtitle">Loading...</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="legend">
+  <span style="color:#aaa">Reference Architecture:</span>
+  <div class="legend-item"><div class="arch-dot dot-specific"></div><span style="color:#60e060">Direct ref arch</span></div>
+  <div class="legend-item"><div class="arch-dot dot-search"></div><span style="color:#60b0e0">Search fallback</span></div>
+</div>
+
+<!-- Region filters -->
+<div class="section-label">Region</div>
+<div class="controls" id="regionControls"></div>
+
+<!-- Compartment filters -->
+<div id="compSection">
+  <div class="divider"></div>
+  <div class="section-label">Compartment</div>
+  <div class="controls" id="compControls"></div>
+</div>
+
+<div class="divider"></div>
+<div class="controls">
+  <button class="arch-btn" id="archOnlyBtn" onclick="toggleArchOnly(this)">📐 Direct Arch Only</button>
+  <input class="search-box" id="search" placeholder="🔍  Search services..." oninput="render()">
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="setSort('name')">Service ↕</th>
+        <th onclick="setSort('count')" class="sorted">Resources ↕</th>
+        <th class="bar-cell"></th>
+        <th onclick="setSort('regions')">Regions ↕</th>
+        <th onclick="setSort('compartments')">Compartments ↕</th>
+        <th>Resource Types</th>
+        <th>Reference Architecture</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const GENERATED_DATE = 'April 2026';
+
+const REGION_COLOURS = {
+  "ap-melbourne-1": { bg: "#1a3a5c", border: "#3a6a9c", text: "#5ab4f0" },
+  "us-chicago-1":   { bg: "#2a1a3a", border: "#5a3a7a", text: "#c07af0" }
+};
+
+const BASE = 'https://docs.oracle.com/solutions/?q=';
+const S = (q) => ({ url: BASE + encodeURIComponent(q), type: 'search' });
+const D = (url) => ({ url, type: 'specific' });
+
+const refArch = {
+  // Built-in (from SKILL.md)
+  "AI Services":        D('https://docs.oracle.com/en/solutions/oci-generative-ai-llm/index.html'),
+  "API Gateway":        D('https://docs.oracle.com/en/solutions/oci-multicloud-api-gateway/index.html'),
+  "Container Engine":   D('https://docs.oracle.com/en/solutions/deploy-app-with-oke-virtual-nodes/index.html'),
+  "Data Flow":          D('https://docs.oracle.com/en/solutions/oci-big-data-flow/index.html'),
+  "Database":           D('https://docs.oracle.com/en/solutions/oci-curated-analysis/index.html'),
+  "Disaster Recovery":  D('https://docs.oracle.com/en/solutions/oci-pilot-light-dr/index.html'),
+  "Generative AI":      D('https://docs.oracle.com/en/solutions/oci-genai-enterprise/index.html'),
+  "Golden Gate":        D('https://docs.oracle.com/en/solutions/oci-curated-analysis/index.html'),
+  "Identity":           D('https://docs.oracle.com/en/solutions/cis-oci-benchmark/index.html'),
+  "Networking":         D('https://docs.oracle.com/en/solutions/oci-best-practices-networking/index.html'),
+  // Resolved via search
+  "Events":             D('https://docs.oracle.com/en/solutions/integrate-oci-functions-and-oci-events/index.html'),
+  "Functions":          D('https://docs.oracle.com/en/solutions/cicd-pipeline-oci-functions/index.html'),
+  "Load Balancer":      D('https://docs.oracle.com/en/solutions/implement-lbaas-error-page/index.html'),
+  "Logging":            D('https://docs.oracle.com/en/solutions/oracle-cloud-observability/index.html'),
+  "Management Dashboard": D('https://docs.oracle.com/en/solutions/oracle-cloud-observability/index.html'),
+  "Streams":            D('https://docs.oracle.com/en/solutions/integrate-oci-functions-and-oci-events/index.html'),
+  // Search fallbacks
+  "Certificates":       S('OCI Certificates TLS management reference architecture'),
+  "Compute":            S('OCI Compute best practices reference architecture'),
+  "Database Tools":     S('OCI Database Tools private endpoint reference architecture'),
+  "Image":              S('OCI Container Registry image management reference architecture'),
+  "Key Management":     S('OCI Vault Key Management reference architecture'),
+  "Media Services":     S('OCI Media Services video streaming reference architecture'),
+  "Notifications":      S('OCI Notifications Events Functions reference architecture'),
+  "Object Storage":     S('OCI Object Storage data lake reference architecture'),
+  "PostgreSQL":         S('OCI PostgreSQL database reference architecture'),
+};
+
+const rawData = [
+  {
+    name: "Logging",
+    count: 4531,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["fauzi_tahir_sandbox", "oci-starter", "techdaylabs", "yukun_liu_sandbox"],
+    types: ["Log", "LogAnalyticsEntity", "LogGroup"]
+  },
+  {
+    name: "Networking",
+    count: 1511,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["Cloudnative", "Dev_Ops", "TerraformTest", "containers", "david_m_reid_sandbox", "fauzi_tahir_sandbox", "oci-starter", "prabha_amarnath_sandbox", "prachi_solomon_sandbox", "techdaylabs", "virtual_oke", "yukun_liu_sandbox"],
+    types: ["Cpe", "CustomerDnsZone", "DHCPOptions", "DnsResolver", "DnsView", "Drg", "DrgAttachment", "DrgRouteDistribution", "DrgRouteTable", "InternetGateway", "LocalPeeringGateway", "NatGateway", "NetworkSecurityGroup", "PrivateIp", "PublicIp", "RemotePeeringConnection", "RouteTable", "SecurityList", "ServiceGateway", "Subnet", "Vcn", "Vnic"]
+  },
+  {
+    name: "Container Engine",
+    count: 1439,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["Architecture", "Dev_Ops", "Docker", "Fn-ApiGateway", "Livelabs", "SHAUNS", "anton_koren_sandbox", "apacanzset03", "fauzi_tahir_sandbox", "functions1", "jason_grogan_sandbox", "karthik_sukumar_sandbox", "prachi_solomon_sandbox", "sam_hallal_sandbox", "shaun", "sreekanth_m_sandbox", "steven_craddock_sandbox", "weblogicMigrationToOKE"],
+    types: ["ContainerImage", "ContainerRepo"]
+  },
+  {
+    name: "Database",
+    count: 426,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["lance_mckain_sandbox", "oci-starter", "techdaylabs", "yukun_liu_sandbox"],
+    types: ["AutonomousDatabase", "Database", "DbNode", "DbSystem", "PostgresqlDbSystem"]
+  },
+  {
+    name: "Object Storage",
+    count: 233,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["AIDemo", "Analytics", "Cloudnative", "Demo", "FSDR", "Learning", "LiveLab_Opensearch", "Livelabs", "Migration", "OCMIntegration", "ODA-Chatbot", "Spatial", "Speech_Analysis", "ZipFunction", "ZipFunction98", "adam_szynkowski_sandbox", "admin", "ai_agents", "ameer_khan_sandbox", "anton_koren_sandbox", "apacanzset03", "architecture", "bijan_raminzad_sandbox", "brendan_sinclair_sandbox", "callan_howell-pavia_sandbox", "cec-projects", "chris_adianto_sandbox", "chris_spierings_sandbox", "cmri", "containers", "david_m_reid_sandbox", "dlt", "fauzi_tahir_sandbox", "franco_ucci_sandbox", "garvit_dhoot_sandbox", "genai-agent", "genai-agent-lab02", "iac_ai", "in_kim_sandbox", "janaka_bk_sandbox", "jason_grogan_sandbox", "karthik_sukumar_sandbox", "kbot", "keith_f_williams_sandbox", "lakehouse", "lance_mckain_sandbox", "metallic", "mushop_ksu_v2", "network", "nicholas_green_sandbox", "noOSAccess", "oci-starter", "omer_shaikh_sandbox", "prabha_amarnath_sandbox", "prachi_solomon_sandbox", "pramila_ramanna_sandbox", "rajkeerat_sethi_sandbox", "rmanNov25", "sam_hallal_sandbox", "sreekanth_m_sandbox", "sujoy_nath_sandbox", "swapnil_gorhe_sandbox", "tam_nguyen_sandbox", "techdaylabs", "temp", "test", "test1", "test3", "the_fort", "veem", "vivek_a_jaiswal_sandbox", "weblogicMigration1", "yk_wu_sandbox", "yukun_liu_sandbox"],
+    types: ["Bucket"]
+  },
+  {
+    name: "Identity",
+    count: 81,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["AI", "Libreswan", "anusha_k_kaulwar_sandbox", "apacanzset03", "david_m_reid_sandbox", "exadata", "fauzi_tahir_sandbox", "labs", "lance_mckain_sandbox", "luanne_sayao_sandbox", "nicholas_green_sandbox", "oci-starter", "prabha_amarnath_sandbox", "prachi_solomon_sandbox", "shared_demos", "sreekanth_m_sandbox", "steven_craddock_sandbox", "sujoy_nath_sandbox", "swapnil_gorhe_sandbox", "tam_nguyen_sandbox", "tarek_khoury_sandbox", "techdaylabs", "the_fort", "training", "vijaykumar_yenne_sandbox", "vivek_a_jaiswal_sandbox", "weblogicMigration1", "yk_wu_sandbox", "yukun_liu_sandbox"],
+    types: ["Compartment", "Policy", "TagDefault", "TagNamespace"]
+  },
+  {
+    name: "Compute",
+    count: 66,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["Cloudnative", "LabCompartment", "fauzi_tahir_sandbox", "lance_mckain_sandbox", "oci-starter", "prachi_solomon_sandbox", "techdaylabs"],
+    types: ["BootVolume", "ConsoleHistory", "Instance", "VolumeBackup"]
+  },
+  {
+    name: "Golden Gate",
+    count: 45,
+    regions: ["ap-melbourne-1"],
+    compartments: ["fauzi_tahir_sandbox"],
+    types: ["GoldenGateConnection", "GoldenGateDeployment", "GoldenGateDeploymentBackup"]
+  },
+  {
+    name: "Management Dashboard",
+    count: 35,
+    regions: ["ap-melbourne-1"],
+    compartments: ["adam_szynkowski_sandbox", "apacanzset03", "containers", "jason_grogan_org", "jason_grogan_sandbox", "shared_demos", "the_fort"],
+    types: ["ManagementDashboard", "ManagementSavedSearch"]
+  },
+  {
+    name: "Generative AI",
+    count: 26,
+    regions: ["us-chicago-1"],
+    compartments: ["ai_agents", "prachi_solomon_sandbox", "techdaylabs", "vivek_a_jaiswal_sandbox"],
+    types: ["GenAiAgent", "GenAiAgentDataIngestionJob", "GenAiAgentDataSource", "GenAiAgentEndpoint", "GenAiAgentKnowledgeBase"]
+  },
+  {
+    name: "Image",
+    count: 21,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["prachi_solomon_sandbox", "techdaylabs"],
+    types: ["Image"]
+  },
+  {
+    name: "Data Flow",
+    count: 14,
+    regions: ["ap-melbourne-1"],
+    compartments: ["fauzi_tahir_sandbox"],
+    types: ["DataFlowApplication", "DataFlowPool", "DataFlowRun"]
+  },
+  {
+    name: "Functions",
+    count: 13,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["fauzi_tahir_sandbox", "oci-starter", "techdaylabs"],
+    types: ["FunctionsApplication", "FunctionsFunction"]
+  },
+  {
+    name: "AI Services",
+    count: 12,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["Demo", "Learning", "admin", "the_fort", "yk_wu_sandbox"],
+    types: ["AiDocumentModel", "AiDocumentProject", "AiLanguageEndpoint", "AiLanguageModel", "AiLanguageProject"]
+  },
+  {
+    name: "Key Management",
+    count: 11,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["lance_mckain_sandbox", "techdaylabs", "yukun_liu_sandbox"],
+    types: ["Key", "Vault", "VaultSecret"]
+  },
+  {
+    name: "Notifications",
+    count: 5,
+    regions: ["ap-melbourne-1"],
+    compartments: ["fauzi_tahir_sandbox", "lance_mckain_sandbox"],
+    types: ["OnsSubscription", "OnsTopic"]
+  },
+  {
+    name: "Database Tools",
+    count: 5,
+    regions: ["ap-melbourne-1", "us-chicago-1"],
+    compartments: ["techdaylabs", "yukun_liu_sandbox"],
+    types: ["DatabaseToolsConnection", "DatabaseToolsPrivateEndpoint"]
+  },
+  {
+    name: "API Gateway",
+    count: 4,
+    regions: ["us-chicago-1"],
+    compartments: ["oci-starter", "techdaylabs"],
+    types: ["ApiDeployment", "ApiGateway", "ApiGatewayApi"]
+  },
+  {
+    name: "Disaster Recovery",
+    count: 2,
+    regions: ["ap-melbourne-1"],
+    compartments: ["yukun_liu_sandbox"],
+    types: ["DrPlan", "DrProtectionGroup"]
+  },
+  {
+    name: "Load Balancer",
+    count: 2,
+    regions: ["ap-melbourne-1"],
+    compartments: ["containers"],
+    types: ["LoadBalancer"]
+  },
+  {
+    name: "Media Services",
+    count: 2,
+    regions: ["ap-melbourne-1"],
+    compartments: ["prachi_solomon_sandbox"],
+    types: ["MediaAsset", "MediaWorkflow"]
+  },
+  {
+    name: "Events",
+    count: 1,
+    regions: ["us-chicago-1"],
+    compartments: ["oci-starter"],
+    types: ["EventRule"]
+  },
+  {
+    name: "PostgreSQL",
+    count: 1,
+    regions: ["us-chicago-1"],
+    compartments: ["oci-starter"],
+    types: ["PostgresqlConfiguration"]
+  },
+  {
+    name: "Streams",
+    count: 1,
+    regions: ["us-chicago-1"],
+    compartments: ["oci-starter"],
+    types: ["Stream"]
+  },
+  {
+    name: "Certificates",
+    count: 1,
+    regions: ["ap-melbourne-1"],
+    compartments: ["shared_demos"],
+    types: ["Certificate"]
+  }
+];
+
+// Derive metadata
+const allRegions = [...new Set(rawData.flatMap(s => s.regions))].sort();
+const allCompartments = [...new Set(rawData.flatMap(s => s.compartments))].sort();
+const services = rawData.map(d => ({
+  ...d,
+  arch: refArch[d.name] || S('OCI ' + d.name)
+}));
+const maxCount = Math.max(...services.map(s => s.count));
+
+let sortKey = 'count', sortDir = -1;
+let filterRegion = 'all';
+let filterComp = 'all';
+let archOnly = false;
+
+// Build subtitle
+document.getElementById('subtitle').innerHTML =
+  'Regions: ' + allRegions.map(r => `<strong style="color:${(REGION_COLOURS[r]||{}).text||'#aaa'}">${r}</strong>`).join(' + ') +
+  ' · ' + GENERATED_DATE +
+  ' · ' + services.reduce((a,s) => a + s.count, 0).toLocaleString() + ' resources across ' + services.length + ' services';
+
+// Stat cards
+const statData = [
+  { val: services.reduce((a,s) => a + s.count, 0).toLocaleString(), lbl: 'Total Resources' },
+  { val: services.length, lbl: 'Services' },
+  { val: allRegions.length, lbl: 'Regions' },
+  { val: allCompartments.length, lbl: 'Compartments' },
+  { val: services.filter(s => s.arch.type === 'specific').length, lbl: 'Direct Ref Arch' },
+];
+document.getElementById('stats').innerHTML = statData.map(s =>
+  `<div class="stat-card"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`
+).join('');
+
+// Region filter buttons
+const regionControls = document.getElementById('regionControls');
+regionControls.innerHTML =
+  `<button class="filter-btn active" onclick="setRegion('all',this)">All</button>` +
+  allRegions.map(r =>
+    `<button class="filter-btn" onclick="setRegion('${r}',this)">${r}</button>`
+  ).join('');
+
+// Compartment filter buttons
+const compControls = document.getElementById('compControls');
+if (allCompartments.length <= 1) {
+  document.getElementById('compSection').style.display = 'none';
+} else {
+  compControls.innerHTML =
+    `<button class="comp-btn active" onclick="setComp('all',this)">All Compartments</button>` +
+    allCompartments.map(c =>
+      `<button class="comp-btn" onclick="setComp('${c}',this)">${c}</button>`
+    ).join('');
+}
+
+function setSort(k) {
+  if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = -1; }
+  document.querySelectorAll('th.sorted').forEach(t => t.classList.remove('sorted'));
+  render();
+}
+function setRegion(r, btn) {
+  filterRegion = r;
+  document.querySelectorAll('#regionControls .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function setComp(c, btn) {
+  filterComp = c;
+  document.querySelectorAll('#compControls .comp-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function toggleArchOnly(btn) {
+  archOnly = !archOnly;
+  btn.classList.toggle('active', archOnly);
+  render();
+}
+
+function regionTag(r) {
+  const c = REGION_COLOURS[r] || { bg: '#1a1d27', border: '#333', text: '#aaa' };
+  return `<span class="tag" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${r}</span>`;
+}
+
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  let rows = services.filter(s => {
+    if (q && !s.name.toLowerCase().includes(q)) return false;
+    if (filterRegion !== 'all' && !s.regions.includes(filterRegion)) return false;
+    if (filterComp !== 'all' && !s.compartments.includes(filterComp)) return false;
+    if (archOnly && s.arch.type !== 'specific') return false;
+    return true;
+  });
+  rows.sort((a, b) => {
+    if (sortKey === 'name') return sortDir * a.name.localeCompare(b.name);
+    if (sortKey === 'count') return sortDir * (a.count - b.count);
+    if (sortKey === 'regions') return sortDir * (a.regions.length - b.regions.length);
+    if (sortKey === 'compartments') return sortDir * (a.compartments.length - b.compartments.length);
+    return 0;
+  });
+
+  const tbody = document.getElementById('tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No services match current filters</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(s => {
+    const pct = Math.max(1, (s.count / maxCount) * 100);
+    const regionTags = s.regions.map(regionTag).join('');
+    const compStr = s.compartments.length <= 2
+      ? s.compartments.join(', ')
+      : s.compartments.slice(0,2).join(', ') + ` +${s.compartments.length - 2}`;
+    const typesStr = s.types.slice(0,3).join(', ') + (s.types.length > 3 ? ` +${s.types.length-3}` : '');
+    const isSpecific = s.arch.type === 'specific';
+    return `<tr>
+      <td class="service-name">${s.name}</td>
+      <td class="count">${s.count.toLocaleString()}</td>
+      <td class="bar-cell"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></td>
+      <td>${regionTags}</td>
+      <td style="font-size:10px;color:#888;max-width:140px">${compStr}</td>
+      <td style="font-size:10px;color:#666;max-width:180px">${typesStr}</td>
+      <td><a class="arch-link ${isSpecific ? 'specific' : 'search'}" href="${s.arch.url}" target="_blank">${isSpecific ? '📐 Ref Arch' : '🔍 Search'}</a></td>
+    </tr>`;
+  }).join('');
+}
+
+render();
+</script>
+</body>
+</html>
