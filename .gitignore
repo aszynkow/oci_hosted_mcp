@@ -1,0 +1,16 @@
+# Ignore backup directory
+backup/
+
+# Ignore Python virtual environment
+.venv/
+
+# Ignore Python cache directories
+__pycache__/
+
+# Ignore deployment output file
+deploy_output.json
+# Ignore cline_mcp_settings.json
+cline_mcp_settings.json
+
+# Ignore Claude wrapper script
+chats/claude/claude_wrapper.sh
