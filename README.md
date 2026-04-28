@@ -66,17 +66,31 @@ When Claude receives a natural-language query about your OCI environment, it:
 ## 🏛️ Architecture
 
 ```
-oci-inventory/
-├── server.py              # FastMCP server — tool definitions & OCI SDK calls
-├── Dockerfile             # Multi-stage build; non-root mcpuser
-├── docker-compose.yml     # Service definition, port mapping, volume mounts
-├── requirements.txt       # Python deps (fastmcp, oci, etc.)
-└── .oci/                  # ⚠️ Do NOT commit — mounted via Docker volume
-    └── config             # OCI API key config
+oci_hosted_mcp/
+├── container/
+│   ├── Dockerfile           # Container build for MCP server
+│   ├── requirements.txt     # Python dependencies (fastmcp, oci, etc.)
+│   └── server.py            # FastMCP server — tool definitions & OCI SDK calls
+├── hosted_app/
+│   ├── deploy.py            # Deployment script
+│   ├── deploy_config.yaml   # Deployment configuration
+│   ├── deploy_output.json   # Deployment output (gitignored)
+│   ├── destroy.py           # Destroy script
+│   └── get_token.py         # Token management
+├── chats/
+│   ├── claude/              # Claude integration scripts
+│   │   └── claude_wrapper.sh  # Wrapper script (gitignored)
+│   └── cline/               # Cline integration settings
+│       └── cline_mcp_settings.json # Cline MCP settings (gitignored)
+├── backup/                  # Backup scripts and configs (gitignored)
+├── images/                  # Architecture and usage diagrams
+├── .venv/                   # Python virtual environment (gitignored)
+├── .gitignore               # Git ignore rules
+└── README.md                # Project documentation
 ```
 
-**Container user:** `mcpuser` (non-root, UID 1000)  
-**Transport:** SSE on `http://localhost:8000/sse`  
+**Container user:** `mcpuser` (non-root, UID 1000)
+**Transport:** SSE on `http://localhost:8000/sse`
 **Runtime:** Docker via Colima (macOS)
 
 ---
@@ -165,11 +179,12 @@ oci-inventory  | INFO:     FastMCP SSE server running on http://0.0.0.0:8000
 oci-inventory  | INFO:     MCP endpoint: http://0.0.0.0:8000/sse
 ```
 
+
 ### 5. Verify the server is reachable
 
 ```bash
-curl -N http://localhost:8000/sse
-# Should return SSE stream headers (content-type: text/event-stream)
+python hosted_app/get_token.py --test
+# Should print HTTP status and SSE stream headers if the server is running
 ```
 
 ---
@@ -265,31 +280,19 @@ OCA supports MCP servers via its tool integration layer. Add the server to your 
 
 ## 🧪 Testing
 
+
 ### Quick smoke test — list tools via MCP protocol
 
 ```bash
-curl -s -X POST http://localhost:8000/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' | jq .
+# Use the --test flag to check the endpoint and basic MCP protocol
+python hosted_app/get_token.py --test
+# Should print HTTP status and a sample SSE response
 ```
-
-Expected: JSON array of tool definitions with `name`, `description`, `inputSchema`.
 
 ### Test a tool call directly
 
-```bash
-curl -s -X POST http://localhost:8000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "list_subscribed_regions",
-      "arguments": {}
-    },
-    "id": 2
-  }' | jq .
-```
+# For custom tool calls, use an HTTP client or extend get_token.py to send specific JSON-RPC requests.
+# Example: To test list_subscribed_regions, add a test case in get_token.py or use a tool like Postman.
 
 ### Test from Claude Desktop
 
