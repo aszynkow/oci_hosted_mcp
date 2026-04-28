@@ -24,6 +24,8 @@ When connected to Claude, the server feeds live tenancy data into the bundled [`
 
 ![Dashboard rendered in Claude](images/image2.png)
 
+![Live tenancy scan in progress](images/image3.png)
+
 A previously generated dashboard is checked in at [examples/oci-tenancy-dashboard-20260421.html](examples/oci-tenancy-dashboard-20260421.html) for reference.
 
 ## Quick Start — Get Your OCI Dashboard in 3 Steps
@@ -31,8 +33,8 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
 1. **Clone & configure**
 
    ```bash
-   git clone https://github.com/your-org/oci-inventory-mcp.git
-   cd oci-inventory-mcp/hosted_app
+   git clone https://github.com/aszynkow/oci_hosted_mcp.git
+   cd oci_hosted_mcp/hosted_app
    # Edit deploy_config.yaml — fill in tenancy_id, compartment_id,
    # identity_domain.url, container.tenancy_namespace, container.username.
    ```
