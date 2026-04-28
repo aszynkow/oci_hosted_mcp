@@ -391,6 +391,18 @@ Allow dynamic-group oci-mcp-genai-dg to read all-resources in tenancy
 
 The `Search` service used by `scan_region` / `scan_tenancy` honours the caller's `read` permission per resource type — anything the dynamic group cannot read is silently omitted from results.
 
+**Vulnerability-scan policies (manual — not created by `deploy.py`)**
+
+OCI Generative AI Hosted Deployments will only succeed once the container image has been scanned by OCI Vulnerability Scanning Service (VSS) and the platform can read the scan results. Add the following three statements to a policy in the same compartment as your container image — `deploy.py` does **not** create them for you:
+
+```text
+Allow dynamic-group oci-mcp-genai-dg to read repos in compartment id <oci.compartment_id>
+Allow dynamic-group oci-mcp-genai-dg to read container-scan-results in compartment id <oci.compartment_id>
+Allow dynamic-group oci-mcp-genai-dg to read vss-family in compartment id <oci.compartment_id>
+```
+
+Replace `<oci.compartment_id>` with the value from [hosted_app/deploy_config.yaml](hosted_app/deploy_config.yaml).
+
 ## Architecture
 
 ```mermaid
