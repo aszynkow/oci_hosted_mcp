@@ -18,9 +18,11 @@
 
 When connected to Claude, the server feeds live tenancy data into the bundled [`oci-tenancy-dashboard`](chats/skills/oci-tenancy-dashboard.skill) skill, which renders a dark-themed, sortable, filterable inventory dashboard — grouped by service, with region tags, compartment filter buttons and direct links into the Oracle Architecture Center for every service in use.
 
-## Screenshot
+## Screenshots
 
 ![OCI Inventory Dashboard](images/image1.png)
+
+![Dashboard rendered in Claude](images/image2.png)
 
 ## Quick Start — Get Your OCI Dashboard in 3 Steps
 
@@ -113,8 +115,6 @@ When connected to Claude, the server feeds live tenancy data into the bundled [`
               before publishing this repo. -->
 
    c. Reload the Cline MCP servers panel. `oci-inventory` will appear as an active server.
-
-   ![Dashboard rendered in Claude](images/image2.png)
 
 > 💬 **Try it — paste this into Claude Desktop or Cline:**
 >
