@@ -237,20 +237,41 @@ def destroy_genai_deployment(cfg: dict, oci_cfg: dict, out: dict, confirm: bool)
             if not deactivated:
                 warn("All deactivation attempts failed — attempting delete anyway")
 
-        genai.delete_hosted_deployment(hosted_deployment_id=dep_id)
-        info("Waiting for deployment deletion...")
-        wait_active_to_deleted(
-            lambda d: genai.get_hosted_deployment(hosted_deployment_id=d),
-            dep_id, "Deployment"
-        )
-        ok(f"GenAI Deployment deleted: {dep_id[:50]}...")
-        clear_output_key("genai_deployment_id")
-    except oci.exceptions.ServiceError as e:
-        if e.status == 404:
-            ok("Deployment already deleted (404)")
-            clear_output_key("genai_deployment_id")
-        else:
-            err(f"Failed to delete deployment: {e.status} {e.code} — {e.message}")
+        # Try delete — retry once on 403 then fall through to app deletion
+        deleted = False
+        for attempt in range(2):
+            try:
+                genai.delete_hosted_deployment(hosted_deployment_id=dep_id)
+                info("Waiting for deployment deletion...")
+                wait_active_to_deleted(
+                    lambda d: genai.get_hosted_deployment(hosted_deployment_id=d),
+                    dep_id, "Deployment"
+                )
+                ok(f"GenAI Deployment deleted: {dep_id[:50]}...")
+                clear_output_key("genai_deployment_id")
+                deleted = True
+                break
+            except oci.exceptions.ServiceError as e:
+                if e.status == 404:
+                    ok("Deployment already deleted (404)")
+                    clear_output_key("genai_deployment_id")
+                    deleted = True
+                    break
+                elif e.status == 403 and attempt == 0:
+                    warn(f"Delete blocked (403) — retrying in 15s...")
+                    time.sleep(15)
+                else:
+                    warn(
+                        f"Could not delete deployment ({e.status}) — "
+                        f"skipping to application deletion which should cascade"
+                    )
+                    break
+
+        if not deleted:
+            warn("Deployment deletion skipped — application deletion will follow and should cascade")
+
+    except Exception as e:
+        warn(f"Unexpected error in deployment step: {e}")
 
 
 def destroy_genai_app(cfg: dict, oci_cfg: dict, out: dict, confirm: bool):
