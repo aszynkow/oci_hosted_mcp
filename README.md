@@ -373,15 +373,21 @@ Deployment-time configuration lives in [hosted_app/deploy_config.yaml](hosted_ap
 
 ## OCI Permissions
 
-The deployment's dynamic group needs the following minimum read-only permissions in the target compartment (or tenancy root for full coverage):
+`deploy.py` creates one dynamic group and one IAM policy in the tenancy root.
 
-- `Allow dynamic-group <dg-name> to inspect all-resources in tenancy`
-- `Allow dynamic-group <dg-name> to read all-resources in tenancy`
-- `Allow dynamic-group <dg-name> to inspect compartments in tenancy`
-- `Allow dynamic-group <dg-name> to inspect tenancies in tenancy`
-- `Allow dynamic-group <dg-name> to read tag-namespaces in tenancy`
+**Dynamic group** — `oci-mcp-genai-dg` (or the name set in `iam.existing_dynamic_group`):
 
-The `Search` service used by `scan_region` / `scan_tenancy` honours the caller's `inspect`/`read` permissions for each underlying resource type — if the dynamic group cannot inspect a service, those resources are silently omitted from results.
+```text
+ALL {resource.compartment.id = '<oci.compartment_id>', resource.type = 'genaihosteddeployment'}
+```
+
+**Policy** — `oci-mcp-genai-policy`, with a single statement:
+
+```text
+Allow dynamic-group oci-mcp-genai-dg to read all-resources in tenancy
+```
+
+The `Search` service used by `scan_region` / `scan_tenancy` honours the caller's `read` permission per resource type — anything the dynamic group cannot read is silently omitted from results.
 
 ## Architecture
 
