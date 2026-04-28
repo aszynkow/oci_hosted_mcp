@@ -79,6 +79,14 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
 
    Restart Claude Desktop. The **oci-inventory** tools will appear in the tools panel.
 
+   > 💬 **Try it — paste this into Claude Desktop or Cline:**
+   >
+   > ```text
+   > Scan my OCI tenancy across ap-melbourne-1 and us-chicago-1 and generate the
+   > interactive dashboard — include compartment filters and Oracle Architecture
+   > Center links.
+   > ```
+
 4. **Set up Cline (VS Code)**
 
    a. Run:
@@ -117,14 +125,6 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
               before publishing this repo. -->
 
    c. Reload the Cline MCP servers panel. `oci-inventory` will appear as an active server.
-
-> 💬 **Try it — paste this into Claude Desktop or Cline:**
->
-> ```text
-> Scan my OCI tenancy across ap-melbourne-1 and us-chicago-1 and generate the
-> interactive dashboard — include compartment filters and Oracle Architecture
-> Center links.
-> ```
 
 ## Example Prompts
 
