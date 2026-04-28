@@ -24,6 +24,8 @@ When connected to Claude, the server feeds live tenancy data into the bundled [`
 
 ![Dashboard rendered in Claude](images/image2.png)
 
+A previously generated dashboard is checked in at [examples/oci-tenancy-dashboard-20260421.html](examples/oci-tenancy-dashboard-20260421.html) for reference.
+
 ## Quick Start — Get Your OCI Dashboard in 3 Steps
 
 1. **Clone & configure**
@@ -154,8 +156,6 @@ architecture.
 Run get_unknown_resource_types against ap-sydney-1 and report any
 resource types that aren't in the built-in service mapping.
 ```
-
-A previously generated dashboard is checked in at [examples/oci-tenancy-dashboard-20260421.html](examples/oci-tenancy-dashboard-20260421.html) for reference.
 
 ## Available MCP Tools
 
