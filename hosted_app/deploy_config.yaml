@@ -1,0 +1,42 @@
+# deploy_config.yaml
+# Fill in all values before running deploy.sh
+
+oci:
+  profile: DEFAULT                          # OCI config profile name
+  region: us-phoenix-1                       # OCI region
+  compartment_id: ""  # Compartment to deploy into
+  tenancy_id: ""          # Your tenancy OCID
+
+identity_domain:
+  url: "" # Domain URL from Console → Identity → Domains
+  # Leave the rest blank — they are populated by the script
+  app_id: ""
+  client_id: ""
+  client_secret: ""
+
+oauth:
+  app_name: oci-mcp-inventory                # Name of the confidential app in Identity Domain
+  audience: oci-mcp-inventory                 # Plain string, no https:// needed
+  scope: invoke                            # Scope name (full = audience/scope)
+
+genai_application:
+  name: oci-mcp-inventory                    # Name of the GenAI application to create
+  min_replicas: 1
+  max_replicas: 3
+  scaling_metric: CONCURRENCY              # CONCURRENCY | CPU | MEMORY | REQUESTS_PER_SECOND
+  scaling_threshold: 10
+
+container:
+  registry: phx.ocir.io                    # OCIR endpoint for your region
+  tenancy_namespace: ""                   # Run: oci os ns get
+  username: name.surname@oracle.com          # Your Oracle Cloud login email
+  repository: oci-mcp-inventory                     # Name of the OCIR repository to create/use
+  tag: latest
+  build_context: ../container              # Path to folder containing Dockerfile (relative to deploy.py)
+  ocir_token: ""       # OCI auth token for docker login — leave blank to be prompted at runtime
+                                           # Console → Identity → Users → <your user> → Auth Tokens → Generate
+  # Computed: registry/tenancy_namespace/repository:tag
+
+iam:
+  existing_dynamic_group: ""   # Set this if tenancy DG limit is hit
+  # Run: oci iam dynamic-group list --all --query 'data[*].name'
