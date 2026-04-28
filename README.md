@@ -39,6 +39,57 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
 
 2. **Build, push and deploy**
 
+   Before running `deploy.py`, populate the required fields in [hosted_app/deploy_config.yaml](hosted_app/deploy_config.yaml). The file ships with empty placeholders that the script will refuse to deploy with:
+
+   ```yaml
+   oci:
+     profile: DEFAULT                       # OCI config profile name
+     region: us-phoenix-1                   # OCI region
+     compartment_id: ""                     # ← REQUIRED — compartment to deploy into
+     tenancy_id: ""                         # ← REQUIRED — your tenancy OCID
+
+   identity_domain:
+     url: ""                                # ← REQUIRED — Console → Identity → Domains → Domain URL
+     # app_id / client_id / client_secret are populated by the script
+
+   oauth:
+     app_name: oci-mcp-inventory
+     audience: oci-mcp-inventory
+     scope: invoke
+
+   genai_application:
+     name: oci-mcp-inventory
+     min_replicas: 1
+     max_replicas: 3
+     scaling_metric: CONCURRENCY
+     scaling_threshold: 10
+
+   container:
+     registry: phx.ocir.io                  # OCIR endpoint — must match your region
+     tenancy_namespace: ""                  # ← REQUIRED — run: oci os ns get
+     username: name.surname@oracle.com      # ← REQUIRED — your Oracle Cloud login email
+     repository: oci-mcp-inventory
+     tag: latest
+     build_context: ../container
+     ocir_token: ""                         # ← REQUIRED (or leave blank to be prompted at runtime)
+                                            #   Console → Identity → Users → <you> → Auth Tokens → Generate
+   iam:
+     existing_dynamic_group: ""             # Optional — set if tenancy DG limit is hit
+   ```
+
+   Required fields to fill in before deploy:
+
+   | Field | How to find it |
+   |---|---|
+   | `oci.compartment_id` | Console → Identity → Compartments → *your compartment* → OCID |
+   | `oci.tenancy_id` | Console → top-right profile → Tenancy → OCID |
+   | `identity_domain.url` | Console → Identity → Domains → *your domain* → Domain URL |
+   | `container.tenancy_namespace` | `oci os ns get` |
+   | `container.username` | Your Oracle Cloud login email |
+   | `container.ocir_token` | Console → Identity → Users → *your user* → Auth Tokens → Generate (or leave blank to be prompted) |
+
+   Then run:
+
    ```bash
    python deploy.py
    ```
@@ -354,3 +405,7 @@ Released under the MIT License. See [LICENSE](LICENSE) for details.
 
 <!-- TODO: LICENSE file currently contains Unlicense text. Replace with the
            standard MIT License text to match this section and the badge above. -->
+
+## References
+
+- [OCI Generative AI — Hosted Deployments](https://docs.oracle.com/en-us/iaas/Content/generative-ai/deployments.htm) — official Oracle documentation for the deployment surface this server targets.
