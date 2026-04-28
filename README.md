@@ -52,21 +52,77 @@ When connected to Claude, the server feeds live tenancy data into the bundled [`
    <!-- TODO: No docker-compose.yml is present in the repo. Add one if a compose-based
               workflow is desired, or remove this note. -->
 
-3. **Ask Claude**
+3. **Set up Claude Desktop**
 
-   After the deployment is live, fetch a bearer token and register the SSE endpoint with Claude:
+   a. Run the Claude Desktop setup wizard:
 
    ```bash
-   python get_token.py --setup-claude --test
+   python get_token.py --setup-claude
    ```
 
-   Then paste this prompt into Claude:
+   This generates a wrapper script `claude_wrapper.sh`. Add the following block to your Claude Desktop `claude_desktop_config.json` (replace `<path>` with the absolute path printed by the script):
 
-   > Scan my OCI tenancy across ap-melbourne-1 and us-chicago-1 and generate the
-   > interactive dashboard — include compartment filters and Oracle Architecture
-   > Center links.
+   ```json
+   {
+     "mcpServers": {
+       "oci-inventory": {
+         "command": "/bin/bash",
+         "args": ["<path>/claude_wrapper.sh"]
+       }
+     }
+   }
+   ```
+
+   Restart Claude Desktop. The **oci-inventory** tools will appear in the tools panel.
+
+4. **Set up Cline (VS Code)**
+
+   a. Run:
+
+   ```bash
+   python get_token.py --setup-cline
+   ```
+
+   This prints a ready-to-paste JSON block and saves a sample config file to `chats/cline/mcp_config.json`.
+
+   b. Open (or create) your Cline MCP settings file and merge in the generated block:
+
+   ```json
+   {
+     "mcpServers": {
+       "oci-inventory": {
+         "autoApprove": [],
+         "disabled": false,
+         "timeout": 60,
+         "type": "streamableHttp",
+         "url": "https://<endpoint>/<your-app-ocid>/actions/invoke",
+         "headers": {
+           "Authorization": "Bearer <token-from-get_token.py>"
+         }
+       }
+     }
+   }
+   ```
+
+   > ⚠️ **Never commit a real Bearer token.** The `get_token.py` script refreshes tokens automatically; treat them like passwords.
+
+   A working sample file (with a redacted token) is stored at `chats/cline/mcp_config.json` for reference.
+
+   <!-- TODO: chats/cline/cline_mcp_settings.json currently contains a live Bearer
+              token. Rename to chats/cline/mcp_config.json and redact the token
+              before publishing this repo. -->
+
+   c. Reload the Cline MCP servers panel. `oci-inventory` will appear as an active server.
 
    ![Dashboard rendered in Claude](images/image2.png)
+
+> 💬 **Try it — paste this into Claude Desktop or Cline:**
+>
+> ```text
+> Scan my OCI tenancy across ap-melbourne-1 and us-chicago-1 and generate the
+> interactive dashboard — include compartment filters and Oracle Architecture
+> Center links.
+> ```
 
 ## Example Prompts
 
