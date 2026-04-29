@@ -421,6 +421,8 @@ Auth flow: Claude obtains an OAuth bearer token from the Identity Domain confide
 
 Contributions are welcome. Please open an issue describing the change before sending a pull request, especially for additions to the `RESOURCE_TYPE_TO_SERVICE` map in [container/server.py](container/server.py) (use `get_unknown_resource_types` to surface gaps).
 
+Release notes for the deployment automation are tracked in [CHANGELOG.md](CHANGELOG.md).
+
 Released under the MIT License. See [LICENSE](LICENSE) for details.
 
 <!-- TODO: LICENSE file currently contains Unlicense text. Replace with the
