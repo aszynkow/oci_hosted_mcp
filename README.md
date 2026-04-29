@@ -170,6 +170,8 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
    ```
 
    > ⚠️ **Never commit a real Bearer token.** The `get_token.py` script refreshes tokens automatically; treat them like passwords.
+   >
+   > ⏱ **Token lifetime is 24 hours by default.** This is set on the confidential app in the Identity Domain (IDCS): Console → Identity → Domains → *your domain* → Integrated applications → `oci-mcp-inventory` → Resource server configuration → **Access token expiration**. Increase it there if you need a longer-lived token; rerun `python get_token.py` to mint a new one once the change is saved.
 
    A working sample file (with a redacted token) is stored at `chats/cline/mcp_config.json` for reference.
 
