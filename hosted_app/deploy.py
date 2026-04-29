@@ -187,6 +187,13 @@ def _image_ref(cfg: dict) -> str:
     c = cfg["container"]
     return f"{c['registry']}/{c['tenancy_namespace']}/{c['repository']}:{c['tag']}"
 
+def _api_image_ref(cfg: dict) -> str:
+    """Build OCIR image reference with full region hostname for GenAI API (no tag)."""
+    c = cfg["container"]
+    short    = c['registry'].split(".")[0]
+    registry = f"{OCIR_REGION_MAP[short]}.ocir.io" if short in OCIR_REGION_MAP else c['registry']
+    return f"{registry}/{c['tenancy_namespace']}/{c['repository']}"
+
 def _ocir_region(registry: str, fallback: str) -> str:
     """Derive OCI region identifier from OCIR registry hostname."""
     short = registry.split(".")[0]
@@ -631,7 +638,8 @@ def step_genai_deploy(cfg: dict, oci_cfg: dict):
         application_id=app_id,
     ).data
     existing_dep = next(
-        (d for d in existing.items if d.display_name == cfg["genai_application"]["name"]),
+        (d for d in existing.items
+         if (getattr(d, "display_name", None) or getattr(d, "name", None)) == cfg["genai_application"]["name"]),
         None,
     )
     if existing_dep and existing_dep.lifecycle_state == "ACTIVE":
@@ -648,7 +656,7 @@ def step_genai_deploy(cfg: dict, oci_cfg: dict):
         "hostedApplicationId": app_id,
         "activeArtifact": {
             "artifactType":  "SIMPLE_DOCKER_ARTIFACT",
-            "containerUri":  image_ref,
+            "containerUri":  _api_image_ref(cfg),  # full region hostname, no tag
             "tag":           ccfg["tag"],
         },
     }
@@ -685,7 +693,9 @@ def step_add_artifact(cfg: dict, oci_cfg: dict, deployment_id: str = "", image: 
         )
 
     ccfg      = cfg["container"]
-    image_ref = image or f"{ccfg['registry']}/{ccfg['tenancy_namespace']}/{ccfg['repository']}"
+    short     = ccfg['registry'].split(".")[0]
+    registry  = f"{OCIR_REGION_MAP[short]}.ocir.io" if short in OCIR_REGION_MAP else ccfg['registry']
+    image_ref = image or f"{registry}/{ccfg['tenancy_namespace']}/{ccfg['repository']}"
     use_tag   = tag or ccfg["tag"]
     full_ref  = f"{image_ref}:{use_tag}" if ":" not in image_ref else image_ref
     info(f"Updating deployment {dep_id[:30]}... → {full_ref}")
@@ -696,7 +706,7 @@ def step_add_artifact(cfg: dict, oci_cfg: dict, deployment_id: str = "", image: 
     payload = {
         "activeArtifact": {
             "artifactType": "SIMPLE_DOCKER_ARTIFACT",
-            "containerUri": full_ref,
+            "containerUri": image_ref,  # no tag — passed separately
             "tag":          use_tag,
         }
     }
