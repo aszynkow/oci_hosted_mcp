@@ -44,7 +44,7 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
    **before** running any `python …` command in the steps below:
 
    ```bash
-   python3 -m venv .venv && .venv/bin/pip install oci requests pyyaml
+   python -m venv .venv && .venv/bin/pip install oci requests pyyaml
    ```
 
    Then either activate the venv (`source .venv/bin/activate`) or invoke the
