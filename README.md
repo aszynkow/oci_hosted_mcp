@@ -39,6 +39,17 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
    # identity_domain.url, container.tenancy_namespace, container.username.
    ```
 
+   Create a Python virtualenv and install the runtime dependencies for the
+   automation scripts (`deploy.py`, `destroy.py`, `get_token.py`). Do this
+   **before** running any `python …` command in the steps below:
+
+   ```bash
+   python3 -m venv .venv && .venv/bin/pip install oci requests pyyaml
+   ```
+
+   Then either activate the venv (`source .venv/bin/activate`) or invoke the
+   scripts via `.venv/bin/python` so they pick up the installed packages.
+
 2. **Build, push and deploy**
 
    Before running `deploy.py`, populate the required fields in [hosted_app/deploy_config.yaml](hosted_app/deploy_config.yaml). The file ships with empty placeholders that the script will refuse to deploy with:
