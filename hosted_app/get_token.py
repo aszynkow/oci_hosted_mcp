@@ -7,6 +7,9 @@ Usage:
     python get_token.py                  # prints token
     python get_token.py --export         # prints: export MCP_TOKEN=...
     python get_token.py --test           # gets token then tests /sse endpoint
+    python get_token.py --setup-claude        Generate claude_wrapper.sh
+    python get_token.py --setup-cline         Generate cline_mcp_settings.json
+    python get_token.py --dir DIR             Output dir override (default varies per --setup-* flag)
 """
 
 import argparse
