@@ -124,6 +124,12 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
 
    a. Run the Claude Desktop setup wizard:
 
+  > **Note:** The Claude wrapper script requires the `mcp-remote` CLI. Install it globally with:
+  >
+  > ```bash
+  > npm install -g mcp-remote@latest
+  > ```
+
    ```bash
    python get_token.py --setup-claude
    ```
