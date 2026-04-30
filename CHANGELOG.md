@@ -4,6 +4,16 @@ All notable changes to the deployment automation in [hosted_app/](hosted_app/) a
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] — 2026-04-30
+
+### Fixed — `get_token.py`
+
+- **Generated `claude_wrapper.sh` now resolves the venv at the repo root instead of inside `hosted_app/`.** The wrapper template's `PYTHON` line was changed from `"$DEPLOY_DIR/.venv/bin/python3"` to `"$DEPLOY_DIR/../.venv/bin/python3"`, matching the README's recommended layout where the virtualenv lives one directory above `hosted_app/`. Without this fix, Claude Desktop launched the wrapper with the system Python, which lacks the `oci`, `requests` and `pyyaml` packages and fails with an import error before any token can be minted.
+
+### Why this matters
+
+Claude Desktop integrations stopped working out of the box for fresh checkouts whose venv was created at the repo root (the documented setup). 1.0.2 brings the wrapper template back in line with the documented venv location so `--setup-claude` produces a working wrapper on first run.
+
 ## [1.0.1] — 2026-04-29
 
 ### Changed — `deploy.py`
