@@ -165,7 +165,7 @@ def main():
 
 # Use the venv python which has correct SSL certs and dependencies
 DEPLOY_DIR="{deploy_dir}"
-PYTHON="$DEPLOY_DIR/.venv/bin/python3"
+PYTHON="$DEPLOY_DIR/../.venv/bin/python3"
 
 TOKEN=$(cd "$DEPLOY_DIR" && "$PYTHON" get_token.py | tail -1)
 
