@@ -4,6 +4,25 @@ All notable changes to the deployment automation in [hosted_app/](hosted_app/) a
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] — 2026-05-01
+
+### Added — `deploy.py`
+
+- **Artifact management improvements:**
+  - New two-step artifact registration and activation flow for GenAI deployments, matching Console UI behavior. This prevents 400 errors when updating artifacts.
+  - Added `--activate-only` option to activate an already-registered artifact without re-registering it.
+  - Tag override support: `--image-only --tag v1` and related flows now ensure the pushed image tag matches the artifact update.
+  - More robust work request handling and status output for artifact operations.
+
+### Changed — `deploy.py`
+
+- Usage and help output updated with new artifact management and recovery examples.
+- Improved internal structure for artifact and deployment update steps.
+
+### Why this matters
+
+Artifact updates and rollbacks are now reliable and match the Console's behavior, with clear CLI flows for registering, activating, and rolling back container images in GenAI deployments. Tag handling is more predictable, and error messages are clearer for all artifact operations.
+
 ## [1.0.2] — 2026-04-30
 
 ### Fixed — `get_token.py`
