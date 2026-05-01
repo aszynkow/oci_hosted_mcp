@@ -23,7 +23,7 @@ from starlette.responses import JSONResponse
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-SERVER_VERSION = 18  # increment on every change
+SERVER_VERSION = 19  # increment on every change
 
 # Disable MCP SDK DNS-rebinding protection — required when accessed via IP or
 # OCI load-balancer hostname.  The SDK's TransportSecurityMiddleware rejects
@@ -690,6 +690,16 @@ def _scan_region(config, signer, region: str, comp_map: dict) -> list[dict]:
 #                            fixes "Internal Server Error" on bare tools/list calls
 # Both passed as constructor kwargs (settings object is immutable after construction)
 mcp = FastMCP("OCI Inventory", streamable_http_path="/", stateless_http=True)
+
+# Disable SSE keepalive pings — mcp-remote cannot handle SSE comment lines
+# (": ping - N") and crashes with SyntaxError when they arrive mid-stream.
+# FastMCP older versions don't accept ping_interval in the constructor so we
+# patch the session manager's ping interval directly after instantiation.
+try:
+    mcp._session_manager.ping_interval = None
+except Exception:
+    pass  # safe to ignore — pings are cosmetic, not functional
+
 
 
 @mcp.tool()

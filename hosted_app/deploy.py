@@ -17,7 +17,7 @@ Automates end-to-end:
 Usage:
     python deploy.py [--config deploy_config.yaml] [--step STEP] [options]
 
-    Steps:
+    Steps (--step):
         all           Run everything: docker build+push + all infra steps (default)
         docker        Docker build + push to OCIR only (same as --image-only)
         validate      Validate config and OCI connectivity only
@@ -30,14 +30,28 @@ Usage:
         python deploy.py                               # full deploy (build + all infra)
         python deploy.py --skip-docker                 # infra steps only, no docker
         python deploy.py --image-only                  # build + push only, stop before infra
+        python deploy.py --image-only --tag v1         # build + push as a specific tag
         python deploy.py --step docker                 # same as --image-only
         python deploy.py --step genai_deploy           # re-deploy container only
-        python deploy.py --add-artifact                # push new image + update existing deployment
-        python deploy.py --add-artifact --skip-docker  # update existing deployment (no new build)
+
+    Artifact management:
+        python deploy.py --add-artifact                # push new image + register + activate
+        python deploy.py --add-artifact --tag v1       # push as v1 + register + activate v1
+        python deploy.py --add-artifact --skip-docker  # register + activate (no new build)
         python deploy.py --add-artifact \\
             --deployment-id <ocid> \\
             --image <registry/ns/repo> \\
-            --tag <new-tag>                            # explicit overrides for artifact update
+            --tag <tag>                                # explicit overrides
+        python deploy.py --activate-only --tag v1      # activate already-registered artifact
+        python deploy.py --activate-only --tag v1 \\
+            --deployment-id <ocid>                     # activate with explicit deployment OCID
+
+    Resume / recovery:
+        python deploy.py --status                      # show which steps completed
+        python deploy.py                               # re-run: skips completed steps
+        python deploy.py --force-step oauth            # force re-run one step
+        python deploy.py --reset-step genai_deploy     # clear one step's completion flag
+        python deploy.py --reset                       # clear all completion flags
 
     After deploy:
         python get_token.py --test
@@ -270,7 +284,7 @@ def _ensure_ocir_repo(cfg: dict, profile: str):
     )
     ok(f"Repository ready: {repo}")
 
-def step_docker(cfg: dict, oci_cfg: dict, skip_login=False):
+def step_docker(cfg: dict, oci_cfg: dict, skip_login=False, tag_override: str = ""):
     """Step 0: Docker build + push to OCIR."""
     section("Step 0: Docker build + push to OCIR")
 
@@ -285,6 +299,14 @@ def step_docker(cfg: dict, oci_cfg: dict, skip_login=False):
         err(f"Dockerfile not found at {dockerfile}")
 
     _check_docker()
+
+    # Apply tag override before building the image reference so the pushed
+    # image tag matches what step_add_artifact will tell the GenAI API to use.
+    if tag_override:
+        cfg = dict(cfg)
+        cfg["container"] = dict(cfg["container"])
+        cfg["container"]["tag"] = tag_override
+        info(f"Tag override applied: {tag_override}")
 
     profile = cfg["oci"]["profile"]
     image   = _image_ref(cfg)
@@ -681,7 +703,13 @@ def step_genai_deploy(cfg: dict, oci_cfg: dict):
 # ── Add artifact to existing deployment ───────────────────────────────────────
 
 def step_add_artifact(cfg: dict, oci_cfg: dict, deployment_id: str = "", image: str = "", tag: str = ""):
-    """Update an existing GenAI Hosted Deployment with a new container image."""
+    """Update an existing GenAI Hosted Deployment with a new container image.
+
+    The GenAI API requires a two-step flow (mirrors what the Console UI does):
+      1. POST /hostedDeployments/{id}/hostedDeploymentArtifacts  — register the artifact
+      2. PUT  /hostedDeployments/{id}                            — set it as activeArtifact
+    Skipping step 1 produces: 400 "Artifact not exists for hostedDeploymentId=..."
+    """
     section("Add Artifact: Update Existing GenAI Hosted Deployment")
 
     out    = load_output()
@@ -697,36 +725,117 @@ def step_add_artifact(cfg: dict, oci_cfg: dict, deployment_id: str = "", image: 
     registry  = f"{OCIR_REGION_MAP[short]}.ocir.io" if short in OCIR_REGION_MAP else ccfg['registry']
     image_ref = image or f"{registry}/{ccfg['tenancy_namespace']}/{ccfg['repository']}"
     use_tag   = tag or ccfg["tag"]
-    full_ref  = f"{image_ref}:{use_tag}" if ":" not in image_ref else image_ref
+    full_ref  = f"{image_ref}:{use_tag}"
     info(f"Updating deployment {dep_id[:30]}... → {full_ref}")
 
-    region  = cfg["oci"]["region"]
-    signer  = _make_genai_signer(oci_cfg)
-    url     = f"https://generativeai.{region}.oci.oraclecloud.com/20231130/hostedDeployments/{dep_id}"
-    payload = {
+    region   = cfg["oci"]["region"]
+    signer   = _make_genai_signer(oci_cfg)
+    base_url = f"https://generativeai.{region}.oci.oraclecloud.com/20231130"
+    headers  = {"Content-Type": "application/json", "Accept": "application/json"}
+
+    genai_cfg = dict(oci_cfg)
+    genai_cfg["region"] = region
+    genai_ep  = f"https://generativeai.{region}.oci.oraclecloud.com"
+    genai     = oci.generative_ai.GenerativeAiClient(genai_cfg, service_endpoint=genai_ep)
+
+    # ── Step 1: Register the artifact on this deployment ─────────────────────
+    info(f"Step 1/2: Registering artifact {full_ref}...")
+    post_url     = f"{base_url}/hostedDeployments/{dep_id}/hostedDeploymentArtifacts"
+    post_payload = {
+        "artifactType": "SIMPLE_DOCKER_ARTIFACT",
+        "containerUri":  image_ref,   # repo path without tag
+        "tag":           use_tag,
+    }
+    post_resp = requests.post(post_url, json=post_payload, auth=signer, headers=headers)
+    if not post_resp.ok:
+        err(f"register artifact failed {post_resp.status_code}: {post_resp.text}")
+
+    # Wait for the registration work request if one was returned
+    wr_id = post_resp.headers.get("opc-work-request-id", "")
+    if wr_id:
+        info(f"Waiting for artifact registration (work request: {wr_id[:30]}...)")
+        wait_for_work_request(genai, wr_id, timeout=300)
+
+    # Extract the artifact ID from the response so we can reference it precisely
+    artifact_id = post_resp.json().get("id", "")
+    ok(f"Artifact registered: {full_ref}" + (f" (id={artifact_id})" if artifact_id else ""))
+
+    # ── Step 2: Activate the artifact ────────────────────────────────────────
+    info(f"Step 2/2: Activating artifact on deployment...")
+    put_url     = f"{base_url}/hostedDeployments/{dep_id}"
+    put_payload = {
         "activeArtifact": {
             "artifactType": "SIMPLE_DOCKER_ARTIFACT",
-            "containerUri": image_ref,  # no tag — passed separately
-            "tag":          use_tag,
+            "containerUri":  image_ref,
+            "tag":           use_tag,
+            **({"id": artifact_id} if artifact_id else {}),
         }
     }
-    resp = requests.put(
-        url, json=payload, auth=signer,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-    )
-    if not resp.ok:
-        err(f"update_hosted_deployment failed {resp.status_code}: {resp.text}")
+    put_resp = requests.put(put_url, json=put_payload, auth=signer, headers=headers)
+    if not put_resp.ok:
+        err(f"activate artifact failed {put_resp.status_code}: {put_resp.text}")
 
-    genai_cfg  = dict(oci_cfg)
-    genai_cfg["region"] = region
-    genai_ep   = f"https://generativeai.{region}.oci.oraclecloud.com"
-    genai      = oci.generative_ai.GenerativeAiClient(genai_cfg, service_endpoint=genai_ep)
-    wr_id      = resp.headers.get("opc-work-request-id", "")
+    wr_id = put_resp.headers.get("opc-work-request-id", "")
     if wr_id:
-        info(f"Waiting for artifact update (work request: {wr_id[:30]}...)")
+        info(f"Waiting for deployment update (work request: {wr_id[:30]}...)")
         wait_for_work_request(genai, wr_id, timeout=600)
 
     ok(f"Deployment updated with new artifact: {full_ref}")
+    save_output({"last_artifact_image": full_ref, "last_artifact_tag": use_tag})
+
+
+# ── Activate an already-registered artifact ───────────────────────────────────
+
+def step_activate_artifact(cfg: dict, oci_cfg: dict, deployment_id: str = "", image: str = "", tag: str = ""):
+    """PUT only — activate an artifact that is already registered on the deployment.
+
+    Use this when the artifact exists in the Console (already registered via
+    --add-artifact or the UI) and you just want to switch the active version.
+    Skips the POST registration step entirely.
+    """
+    section("Activate Artifact: Set Active Artifact on Existing Deployment")
+
+    out    = load_output()
+    dep_id = deployment_id or out.get("genai_deployment_id", "")
+    if not dep_id:
+        err(
+            "No deployment ID found.\n"
+            "  Pass --deployment-id <ocid>  or run a full deploy first (deploy_output.json)"
+        )
+
+    ccfg      = cfg["container"]
+    short     = ccfg['registry'].split(".")[0]
+    registry  = f"{OCIR_REGION_MAP[short]}.ocir.io" if short in OCIR_REGION_MAP else ccfg['registry']
+    image_ref = image or f"{registry}/{ccfg['tenancy_namespace']}/{ccfg['repository']}"
+    use_tag   = tag or ccfg["tag"]
+    full_ref  = f"{image_ref}:{use_tag}"
+    info(f"Activating artifact {full_ref} on deployment {dep_id[:30]}...")
+
+    region   = cfg["oci"]["region"]
+    signer   = _make_genai_signer(oci_cfg)
+    put_url  = f"https://generativeai.{region}.oci.oraclecloud.com/20231130/hostedDeployments/{dep_id}"
+    headers  = {"Content-Type": "application/json", "Accept": "application/json"}
+    payload  = {
+        "activeArtifact": {
+            "artifactType": "SIMPLE_DOCKER_ARTIFACT",
+            "containerUri":  image_ref,
+            "tag":           use_tag,
+        }
+    }
+    resp = requests.put(put_url, json=payload, auth=signer, headers=headers)
+    if not resp.ok:
+        err(f"activate artifact failed {resp.status_code}: {resp.text}")
+
+    genai_cfg = dict(oci_cfg)
+    genai_cfg["region"] = region
+    genai_ep  = f"https://generativeai.{region}.oci.oraclecloud.com"
+    genai     = oci.generative_ai.GenerativeAiClient(genai_cfg, service_endpoint=genai_ep)
+    wr_id     = resp.headers.get("opc-work-request-id", "")
+    if wr_id:
+        info(f"Waiting for activation (work request: {wr_id[:30]}...)")
+        wait_for_work_request(genai, wr_id, timeout=600)
+
+    ok(f"Artifact activated: {full_ref}")
     save_output({"last_artifact_image": full_ref, "last_artifact_tag": use_tag})
 
 
@@ -787,16 +896,24 @@ Steps (--step):
   genai_app     GenAI Hosted Application
   genai_deploy  GenAI Hosted Deployment (container)
 
-Examples:
-  python deploy.py                              # full deploy
+Examples — full deploy:
+  python deploy.py                              # full deploy (build + all infra)
   python deploy.py --skip-docker               # infra only (image already in OCIR)
-  python deploy.py --image-only                # build+push, stop before infra
-  python deploy.py --step genai_deploy         # re-deploy container only
+  python deploy.py --image-only                # build+push only, stop before infra
+  python deploy.py --image-only --tag v1       # build+push tagged as v1
   python deploy.py --step docker               # alias for --image-only
-  python deploy.py --add-artifact              # push updated image + update deployment
-  python deploy.py --add-artifact --skip-docker \\
-      --deployment-id ocid1.xxx --tag v2       # update deployment, no new build
+  python deploy.py --step genai_deploy         # re-deploy container only
 
+Examples — artifact management:
+  python deploy.py --add-artifact              # push + register + activate (uses config tag)
+  python deploy.py --add-artifact --tag v1     # push as v1, register + activate v1
+  python deploy.py --add-artifact --skip-docker \\
+      --tag v1                                 # register + activate v1 (no new build)
+  python deploy.py --add-artifact \\
+      --deployment-id ocid1.xxx --tag v2       # explicit deployment + tag
+  python deploy.py --activate-only --tag v1    # activate already-registered artifact (PUT only)
+  python deploy.py --activate-only --tag v1 \\
+      --deployment-id ocid1.xxx                # activate with explicit deployment OCID
 
 Resume / recovery:
   python deploy.py --status                    # show which steps completed
@@ -804,6 +921,7 @@ Resume / recovery:
   python deploy.py --force-step oauth          # force re-run one step even if complete
   python deploy.py --reset-step genai_deploy   # clear one step's completion flag
   python deploy.py --reset                     # clear all completion flags
+
 After deploy:
   python get_token.py --test
         """,
@@ -839,6 +957,10 @@ After deploy:
     art_grp.add_argument(
         "--add-artifact", action="store_true",
         help="Push new image (unless --skip-docker) and update an existing deployment",
+    )
+    art_grp.add_argument(
+        "--activate-only", action="store_true",
+        help="Activate an already-registered artifact (no docker build, no POST registration)",
     )
     art_grp.add_argument(
         "--deployment-id", default="", metavar="OCID",
@@ -915,7 +1037,7 @@ def main():
         print("━" * 58)
 
         if not args.skip_docker:
-            step_docker(cfg, oci_cfg, skip_login=args.skip_login)
+            step_docker(cfg, oci_cfg, skip_login=args.skip_login, tag_override=args.tag)
 
         step_add_artifact(
             cfg, oci_cfg,
@@ -926,9 +1048,24 @@ def main():
         ok("Done — artifact updated.")
         return
 
+    # ── --activate-only: PUT to activate an already-registered artifact ──────
+    if args.activate_only:
+        print()
+        print("━" * 58)
+        print(" OCI MCP Server — Activate Existing Artifact")
+        print("━" * 58)
+        step_activate_artifact(
+            cfg, oci_cfg,
+            deployment_id=args.deployment_id,
+            image=args.image,
+            tag=args.tag,
+        )
+        ok("Done — artifact activated.")
+        return
+
     # ── --image-only or --step docker: build+push then stop ──────────────────
     if args.image_only or args.step == "docker":
-        step_docker(cfg, oci_cfg, skip_login=args.skip_login)
+        step_docker(cfg, oci_cfg, skip_login=args.skip_login, tag_override=args.tag)
         mark_complete("docker")
         print()
         info(
@@ -967,7 +1104,7 @@ def main():
 
         try:
             if fn is step_docker:
-                fn(cfg, oci_cfg, skip_login=args.skip_login)
+                fn(cfg, oci_cfg, skip_login=args.skip_login, tag_override=args.tag)
             else:
                 fn(cfg, oci_cfg)
             mark_complete(step_name)

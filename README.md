@@ -268,13 +268,15 @@ All automation lives in [hosted_app/](hosted_app/) and is driven from [hosted_ap
 
 #### deploy.py
 
+
 End-to-end deploy: Docker build + push to OCIR → Identity Domain OAuth app → IAM dynamic group + policy → GenAI Hosted Application + Deployment.
 
 ```bash
 usage: deploy.py [-h] [--config FILE] [--step STEP] [--skip-docker]
                  [--image-only] [--skip-login] [--add-artifact]
-                 [--deployment-id OCID] [--image REGISTRY/NS/REPO] [--tag TAG]
-                 [--status] [--force-step STEP] [--reset] [--reset-step STEP]
+                 [--activate-only] [--deployment-id OCID]
+                 [--image REGISTRY/NS/REPO] [--tag TAG] [--status]
+                 [--force-step STEP] [--reset] [--reset-step STEP]
 
 OCI MCP Server — full deploy automation (build → push → infra)
 
@@ -294,6 +296,8 @@ Docker options:
 Add artifact (update existing deployment):
   --add-artifact        Push new image (unless --skip-docker) and update an
                         existing deployment
+  --activate-only       Activate an already-registered artifact (no docker
+                        build, no POST registration)
   --deployment-id OCID  Deployment OCID to update (reads deploy_output.json if
                         omitted)
   --image REGISTRY/NS/REPO
@@ -318,6 +322,35 @@ Steps (--step):
   iam           IAM dynamic group + policy
   genai_app     GenAI Hosted Application
   genai_deploy  GenAI Hosted Deployment (container)
+
+Examples — full deploy:
+  python deploy.py                              # full deploy (build + all infra)
+  python deploy.py --skip-docker               # infra only (image already in OCIR)
+  python deploy.py --image-only                # build+push only, stop before infra
+  python deploy.py --image-only --tag v1       # build+push tagged as v1
+  python deploy.py --step docker               # alias for --image-only
+  python deploy.py --step genai_deploy         # re-deploy container only
+
+Examples — artifact management:
+  python deploy.py --add-artifact              # push + register + activate (uses config tag)
+  python deploy.py --add-artifact --tag v1     # push as v1, register + activate v1
+  python deploy.py --add-artifact --skip-docker \
+      --tag v1                                 # register + activate v1 (no new build)
+  python deploy.py --add-artifact \
+      --deployment-id ocid1.xxx --tag v2       # explicit deployment + tag
+  python deploy.py --activate-only --tag v1    # activate already-registered artifact (PUT only)
+  python deploy.py --activate-only --tag v1 \
+      --deployment-id ocid1.xxx                # activate with explicit deployment OCID
+
+Resume / recovery:
+  python deploy.py --status                    # show which steps completed
+  python deploy.py                             # re-run: skips completed steps automatically
+  python deploy.py --force-step oauth          # force re-run one step even if complete
+  python deploy.py --reset-step genai_deploy   # clear one step's completion flag
+  python deploy.py --reset                     # clear all completion flags
+
+After deploy:
+  python get_token.py --test
 ```
 
 **Prerequisites:** `oci`, `requests`, `pyyaml` Python packages; `docker` CLI logged into your target OCIR; a populated `deploy_config.yaml`; an OCI Auth Token (Console → Identity → Users → *your user* → Auth Tokens) for `docker login`.
