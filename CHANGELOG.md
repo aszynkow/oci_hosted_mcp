@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [1.0.3] — 2026-05-01
 
+### Changed — `server.py`, `requirements.txt`
+
+- **SSE keepalive compatibility:** Disabled FastMCP SSE keepalive pings to prevent mcp-remote client crashes. This is done by patching the session manager's ping interval after instantiating the FastMCP server.
+- **Dependency update:** MCP SDK bumped from 1.9.0 to 1.27.0 in requirements.txt for improved protocol support and bugfixes.
+- **Version bump:** Internal server version incremented to 19.
+
+### Why this matters
+
+The server now works reliably with mcp-remote and Claude Desktop, avoiding protocol errors caused by SSE keepalive pings. The MCP SDK upgrade brings protocol and stability improvements.
+
 ### Added — `deploy.py`
 
 - **Artifact management improvements:**
