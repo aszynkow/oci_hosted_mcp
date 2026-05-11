@@ -468,9 +468,9 @@ flowchart LR
         A -- invokes --> S1
         A -- invokes --> S2
     end
-    A -- SSE / Streamable HTTP --> B[FastMCP Server<br/>Docker container]
+    A -- SSE / Streamable HTTP<br/>JWT Bearer Token --> B[FastMCP Server<br/>Docker container]
     S2 -. Architecture Center<br/>links .-> WEB[(Oracle Docs /<br/>Architecture Center)]
-    B -- OCI Python SDK --> C[OCI API]
+    B -- OCI Python SDK<br/>Instance Principal --> C[OCI API]
     subgraph Hosted["OCI GenAI Hosted Deployment"]
         B
     end
