@@ -459,7 +459,17 @@ Replace `<oci.compartment_id>` with the value from [hosted_app/deploy_config.yam
 
 ```mermaid
 flowchart LR
-    A[Claude<br/>claude.ai] -- SSE / Streamable HTTP --> B[FastMCP Server<br/>Docker container]
+    subgraph ClaudeSide["Claude (claude.ai)"]
+        A[Claude]
+        subgraph Skills["Project Skills"]
+            S1[oci-tenancy-dashboard<br/>renders HTML inventory]
+            S2[orcl-docs-search<br/>live Oracle web lookups]
+        end
+        A -- invokes --> S1
+        A -- invokes --> S2
+    end
+    A -- SSE / Streamable HTTP --> B[FastMCP Server<br/>Docker container]
+    S2 -. Architecture Center<br/>links .-> WEB[(Oracle Docs /<br/>Architecture Center)]
     B -- OCI Python SDK --> C[OCI API]
     subgraph Hosted["OCI GenAI Hosted Deployment"]
         B
