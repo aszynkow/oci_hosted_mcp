@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Use the venv python which has correct SSL certs and dependencies
 DEPLOY_DIR="<path_to_hosted_app>"
 PYTHON="$DEPLOY_DIR/../.venv/bin/python3"
