@@ -11,6 +11,3 @@ __pycache__/
 deploy_output.json
 # Ignore cline_mcp_settings.json
 cline_mcp_settings.json
-
-# Ignore Claude wrapper script
-chats/claude/claude_wrapper.sh
