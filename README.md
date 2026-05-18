@@ -166,7 +166,7 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
    }
    ```
 
-   The Windows wrapper is fully self-contained — it embeds the OAuth client credentials and uses PowerShell's `Invoke-RestMethod` to mint a fresh JWT bearer token on every Claude Desktop launch, so no Python virtualenv is required on the client machine. Node.js (for `npx -y mcp-remote@latest`) is the only runtime prerequisite.
+   The Windows wrapper is fully self-contained — it embeds the OAuth client credentials and uses PowerShell's `Invoke-RestMethod` to mint a fresh JWT bearer token on every Claude Desktop launch, so no Python virtualenv is required on the client machine. The globally installed `mcp-remote` (see prerequisite above) is the only runtime dependency.
 
    > ⚠️ **Treat `claude_wrapper.cmd` as a secret.** It contains the Identity Domain `client_secret`. Store it outside any synced/shared folder and never check it into git.
 
