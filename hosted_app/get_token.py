@@ -210,7 +210,7 @@ for /f "delims=" %%T in ('powershell -NoProfile -Command ^
    (Invoke-RestMethod -Method Post -Uri ($env:DOMAIN_URL.TrimEnd('/') + '/oauth2/v1/token') -Body $body -ContentType 'application/x-www-form-urlencoded').access_token"') do set "TOKEN=%%T"
 
 if "%TOKEN%"=="" (echo ERROR: token fetch failed 1>&2 & exit /b 1)
-npx -y mcp-remote@latest "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%"
+npx -y mcp-remote "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%"
 """
             with open(win_wrapper, "w", newline="\r\n") as f:
                 f.write(cmd_script)

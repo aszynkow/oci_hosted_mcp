@@ -122,6 +122,14 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
 
 3. **Set up Claude Desktop**
 
+   > **Prerequisite (macOS / Linux / Windows):** the Claude Desktop wrapper invokes `mcp-remote` to bridge Claude Desktop's stdio MCP transport to the server's Streamable HTTP endpoint. Install it globally before running the wizard:
+   >
+   > ```bash
+   > npm install -g mcp-remote@latest
+   > ```
+   >
+   > On Windows, install Node.js first if it isn't already present: `winget install OpenJS.NodeJS.LTS`, then run the same `npm install -g` command from PowerShell or `cmd.exe`.
+
    a. Run the Claude Desktop setup wizard:
 
    ```bash
@@ -145,15 +153,7 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
 
    `claude_desktop_config.json` lives at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `~/.config/Claude/claude_desktop_config.json` on Linux.
 
-   On macOS / Linux the wrapper invokes `npx -y mcp-remote@latest`, which auto-downloads `mcp-remote` on first run — no global install needed.
-
    **Windows** — copy `claude_wrapper.cmd` to a stable path (e.g. `C:\oci-mcp\claude_wrapper.cmd`) and add the following block to `%APPDATA%\Claude\claude_desktop_config.json`:
-
-   > **Prerequisite (Windows only):** install Node.js (`winget install OpenJS.NodeJS.LTS`) and then install `mcp-remote` globally. The `npx -y` auto-install path is unreliable when launched via `cmd.exe` from Claude Desktop, so a global install is required:
-   >
-   > ```powershell
-   > npm install -g mcp-remote@latest
-   > ```
 
    ```json
    {
