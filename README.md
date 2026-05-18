@@ -129,12 +129,16 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
   > ```bash
   > npm install -g mcp-remote@latest
   > ```
+  >
+  > On Windows, run the same command from PowerShell or `cmd.exe` after installing Node.js (`winget install OpenJS.NodeJS.LTS`).
 
    ```bash
    python get_token.py --setup-claude
    ```
 
-   This generates a wrapper script `claude_wrapper.sh`. Add the following block to your Claude Desktop `claude_desktop_config.json` (replace `<path>` with the absolute path printed by the script):
+   This generates two wrapper scripts side by side — `claude_wrapper.sh` for macOS / Linux and `claude_wrapper.cmd` for Windows. Use the one that matches your OS.
+
+   **macOS / Linux** — add the following block to your Claude Desktop `claude_desktop_config.json` (replace `<path>` with the absolute path printed by the script):
 
    ```json
    {
@@ -146,6 +150,25 @@ A previously generated dashboard is checked in at [examples/oci-tenancy-dashboar
      }
    }
    ```
+
+   `claude_desktop_config.json` lives at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `~/.config/Claude/claude_desktop_config.json` on Linux.
+
+   **Windows** — copy `claude_wrapper.cmd` to a stable path (e.g. `C:\oci-mcp\claude_wrapper.cmd`) and add the following block to `%APPDATA%\Claude\claude_desktop_config.json`:
+
+   ```json
+   {
+     "mcpServers": {
+       "oci-inventory": {
+         "command": "cmd.exe",
+         "args": ["/c", "C:\\oci-mcp\\claude_wrapper.cmd"]
+       }
+     }
+   }
+   ```
+
+   The Windows wrapper is fully self-contained — it embeds the OAuth client credentials and uses PowerShell's `Invoke-RestMethod` to mint a fresh JWT bearer token on every Claude Desktop launch, so no Python virtualenv is required on the client machine. Node.js (for `npx -y mcp-remote@latest`) is the only runtime prerequisite.
+
+   > ⚠️ **Treat `claude_wrapper.cmd` as a secret.** It contains the Identity Domain `client_secret`. Store it outside any synced/shared folder and never check it into git.
 
    Restart Claude Desktop. The **oci-inventory** tools will appear in the tools panel.
 

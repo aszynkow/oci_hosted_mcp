@@ -4,6 +4,19 @@ All notable changes to the deployment automation in [hosted_app/](hosted_app/) a
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] — 2026-05-18
+
+### Added — `README.md`
+
+- **Windows Claude Desktop setup documented.** The README now covers the Windows-native client flow alongside macOS / Linux: which wrapper file to use (`claude_wrapper.cmd`), where Claude Desktop reads its config from on Windows (`%APPDATA%\Claude\claude_desktop_config.json`), and the exact `mcpServers` JSON block that wires `cmd.exe /c` to the wrapper.
+- **Node.js prerequisite for Windows** — documented `winget install OpenJS.NodeJS.LTS` as the one-line install path so `npx -y mcp-remote@latest` resolves on a fresh Windows machine.
+- **Secret-handling warning** — explicit callout that `claude_wrapper.cmd` embeds the Identity Domain `client_secret` and must be stored outside synced / shared folders and never committed.
+- **Architecture diagram updated.** The Mermaid diagram in the *Architecture* section now groups Claude with its two Project Skills (`oci-tenancy-dashboard`, `orcl-docs-search`), labels the Claude ↔ Hosted Deployment edge as `SSE / Streamable HTTP + JWT Bearer Token`, and labels the FastMCP ↔ OCI API edge with the auth mode used inside the container. A new *Skill usage* paragraph below the diagram explains how each skill consumes the MCP tools.
+
+### Why this matters
+
+Until 1.0.4 the README only described the macOS / Linux Claude Desktop flow, even though `get_token.py --setup-claude` has been generating `claude_wrapper.cmd` alongside `claude_wrapper.sh` since 1.0.3. Windows users had to read the script source to discover the setup. The architecture diagram now also matches the actual data flow (JWT-authenticated MCP traffic + skill orchestration), so new contributors can understand the system end-to-end from the README alone.
+
 ## [1.0.3] — 2026-05-01
 
 ### Changed — `server.py`, `requirements.txt`

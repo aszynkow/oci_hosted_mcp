@@ -18,6 +18,15 @@ import sys
 import urllib.request
 import urllib.parse
 
+
+def cmd_set_value(value: str, field_name: str) -> str:
+    """Escape a value for use in a Windows `set "NAME=value"` line."""
+    text = str(value or "")
+    if any(ch in text for ch in '\r\n"'):
+        raise ValueError(f"{field_name} contains a character that cannot be written to claude_wrapper.cmd")
+    return text.replace("^", "^^").replace("%", "%%")
+
+
 def load_output(path="deploy_output.json") -> dict:
     try:
         with open(path) as f:
@@ -100,7 +109,7 @@ def main():
     parser.add_argument("--output", default="deploy_output.json")
     parser.add_argument("--export", action="store_true", help="Print export statement")
     parser.add_argument("--test",        action="store_true", help="Test SSE endpoint after getting token")
-    parser.add_argument("--setup-claude", action="store_true", help="Generate claude_wrapper.sh")
+    parser.add_argument("--setup-claude", action="store_true", help="Generate claude_wrapper.sh and claude_wrapper.cmd")
     parser.add_argument("--setup-cline",  action="store_true", help="Generate cline_mcp_settings.json")
     parser.add_argument("--dir",          default=None,        help="Output dir override (default varies per --setup-* flag)")
     parser.add_argument("--client-secret", default=None,
@@ -164,6 +173,7 @@ def main():
         output_dir   = os.path.abspath(args.dir if args.dir else default_dir)
         os.makedirs(output_dir, exist_ok=True)
         wrapper      = os.path.join(output_dir, "claude_wrapper.sh")
+        win_wrapper  = os.path.join(output_dir, "claude_wrapper.cmd")
         script = f"""#!/bin/bash
 
 # Use the venv python which has correct SSL certs and dependencies
@@ -185,6 +195,36 @@ exec npx -y mcp-remote \\
             f.write(script)
         os.chmod(wrapper, 0o755)
         print(f"Created: {wrapper}", file=sys.stderr)
+
+        cmd_script = f"""@echo off
+setlocal
+set "DOMAIN_URL={cmd_set_value(out.get("domain_url", "").rstrip("/"), "domain_url")}"
+set "CLIENT_ID={cmd_set_value(out.get("client_id", ""), "client_id")}"
+set "CLIENT_SECRET={cmd_set_value(client_secret, "client_secret")}"
+set "FULL_SCOPE={cmd_set_value(out.get("full_scope", ""), "full_scope")}"
+set "ENDPOINT_URL={cmd_set_value(endpoint, "endpoint_url")}"
+
+for /f "delims=" %%T in ('powershell -NoProfile -Command ^
+  "$body = @{{grant_type='client_credentials';client_id=$env:CLIENT_ID;client_secret=$env:CLIENT_SECRET;scope=$env:FULL_SCOPE}}; ^
+   (Invoke-RestMethod -Method Post -Uri ($env:DOMAIN_URL.TrimEnd('/') + '/oauth2/v1/token') -Body $body -ContentType 'application/x-www-form-urlencoded').access_token"') do set "TOKEN=%%T"
+
+if "%TOKEN%"=="" (echo ERROR: token fetch failed 1>&2 & exit /b 1)
+npx -y mcp-remote@latest "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%"
+"""
+        with open(win_wrapper, "w", newline="\r\n") as f:
+            f.write(cmd_script)
+        print(f"Created: {win_wrapper}", file=sys.stderr)
+        print("""
+Windows Claude Desktop config:
+{
+  "mcpServers": {
+    "oci-inventory": {
+      "command": "cmd.exe",
+      "args": ["/c", "C:\\\\oci-mcp\\\\claude_wrapper.cmd"]
+    }
+  }
+}
+""", file=sys.stderr)
 
     if args.setup_cline:
         import os
