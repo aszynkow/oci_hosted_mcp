@@ -196,7 +196,8 @@ exec npx -y mcp-remote \\
         os.chmod(wrapper, 0o755)
         print(f"Created: {wrapper}", file=sys.stderr)
 
-        cmd_script = f"""@echo off
+        try:
+            cmd_script = f"""@echo off
 setlocal
 set "DOMAIN_URL={cmd_set_value(out.get("domain_url", "").rstrip("/"), "domain_url")}"
 set "CLIENT_ID={cmd_set_value(out.get("client_id", ""), "client_id")}"
@@ -211,10 +212,10 @@ for /f "delims=" %%T in ('powershell -NoProfile -Command ^
 if "%TOKEN%"=="" (echo ERROR: token fetch failed 1>&2 & exit /b 1)
 npx -y mcp-remote@latest "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%"
 """
-        with open(win_wrapper, "w", newline="\r\n") as f:
-            f.write(cmd_script)
-        print(f"Created: {win_wrapper}", file=sys.stderr)
-        print("""
+            with open(win_wrapper, "w", newline="\r\n") as f:
+                f.write(cmd_script)
+            print(f"Created: {win_wrapper}", file=sys.stderr)
+            print("""
 Windows Claude Desktop config:
 {
   "mcpServers": {
@@ -225,6 +226,11 @@ Windows Claude Desktop config:
   }
 }
 """, file=sys.stderr)
+        except Exception as exc:
+            print(
+                f"WARNING: {wrapper} was created, but claude_wrapper.cmd was not: {exc}",
+                file=sys.stderr,
+            )
 
     if args.setup_cline:
         import os
