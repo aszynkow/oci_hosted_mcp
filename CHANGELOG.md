@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added — `README.md`
 
 - **Windows Claude Desktop setup documented.** The README now covers the Windows-native client flow alongside macOS / Linux: which wrapper file to use (`claude_wrapper.cmd`), where Claude Desktop reads its config from on Windows (`%APPDATA%\Claude\claude_desktop_config.json`), and the exact `mcpServers` JSON block that wires `cmd.exe /c` to the wrapper.
-- **Node.js prerequisite for Windows** — documented `winget install OpenJS.NodeJS.LTS` as the one-line install path so `npx -y mcp-remote@latest` resolves on a fresh Windows machine.
+- **Node.js + global `mcp-remote` prerequisite for Windows** — documented `winget install OpenJS.NodeJS.LTS` followed by `npm install -g mcp-remote@latest`. The global install is required only on Windows because `npx -y` auto-install is unreliable when launched via `cmd.exe` from Claude Desktop; macOS / Linux still rely on the `npx -y` auto-download path and need no global install.
 - **Secret-handling warning** — explicit callout that `claude_wrapper.cmd` embeds the Identity Domain `client_secret` and must be stored outside synced / shared folders and never committed.
 - **Architecture diagram updated.** The Mermaid diagram in the *Architecture* section now groups Claude with its two Project Skills (`oci-tenancy-dashboard`, `orcl-docs-search`), labels the Claude ↔ Hosted Deployment edge as `SSE / Streamable HTTP + JWT Bearer Token`, and labels the FastMCP ↔ OCI API edge with the auth mode used inside the container. A new *Skill usage* paragraph below the diagram explains how each skill consumes the MCP tools.
 
