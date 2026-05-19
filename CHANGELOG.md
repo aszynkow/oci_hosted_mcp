@@ -4,6 +4,16 @@ All notable changes to the deployment automation in [hosted_app/](hosted_app/) a
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] — 2026-05-19
+
+### Fixed — `get_token.py`
+
+- **Generated `claude_wrapper.cmd` no longer dies with `+ was unexpected at this time.` on Windows.** The inline PowerShell that fetches the OAuth token previously built the token URL as `($env:DOMAIN_URL.TrimEnd('/') + '/oauth2/v1/token')`. Inside cmd's `for /f '…'` command delimiter, the embedded single quotes around `'/'` and `'/oauth2/v1/token'` closed cmd's quoting early, leaving the `+` operator exposed to the cmd parser — which rejected it before PowerShell ever started. The template now pre-computes the URL as a cmd variable (`set "TOKEN_URL=%DOMAIN_URL%/oauth2/v1/token"`) and the PowerShell call references `$env:TOKEN_URL` directly, removing both the `+` and the inline single-quoted literals from cmd's view.
+
+### Why this matters
+
+Until 1.0.5, every Windows Claude Desktop launch using the generated `claude_wrapper.cmd` failed at startup — the MCP server transport closed immediately with `Server transport closed unexpectedly` because the wrapper exited before fetching a token. The fix restores the Windows-native flow added in 1.0.3 / documented in 1.0.4 so that `get_token.py --setup-claude` produces a wrapper that runs on first invocation without manual editing.
+
 ## [1.0.4] — 2026-05-18
 
 ### Added — `README.md`

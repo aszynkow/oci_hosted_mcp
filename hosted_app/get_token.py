@@ -204,10 +204,11 @@ set "CLIENT_ID={cmd_set_value(out.get("client_id", ""), "client_id")}"
 set "CLIENT_SECRET={cmd_set_value(client_secret, "client_secret")}"
 set "FULL_SCOPE={cmd_set_value(out.get("full_scope", ""), "full_scope")}"
 set "ENDPOINT_URL={cmd_set_value(endpoint, "endpoint_url")}"
+set "TOKEN_URL=%DOMAIN_URL%/oauth2/v1/token"
 
 for /f "delims=" %%T in ('powershell -NoProfile -Command ^
   "$body = @{{grant_type='client_credentials';client_id=$env:CLIENT_ID;client_secret=$env:CLIENT_SECRET;scope=$env:FULL_SCOPE}}; ^
-   (Invoke-RestMethod -Method Post -Uri ($env:DOMAIN_URL.TrimEnd('/') + '/oauth2/v1/token') -Body $body -ContentType 'application/x-www-form-urlencoded').access_token"') do set "TOKEN=%%T"
+   (Invoke-RestMethod -Method Post -Uri $env:TOKEN_URL -Body $body -ContentType 'application/x-www-form-urlencoded').access_token"') do set "TOKEN=%%T"
 
 if "%TOKEN%"=="" (echo ERROR: token fetch failed 1>&2 & exit /b 1)
 npx -y mcp-remote "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%"
