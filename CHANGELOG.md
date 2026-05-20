@@ -4,6 +4,18 @@ All notable changes to the deployment automation in [hosted_app/](hosted_app/) a
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] — 2026-05-20
+
+### Fixed — `get_token.py`
+
+- **Generated `claude_wrapper.cmd` token fetch rewritten as a single-line PowerShell call.** The 1.0.5 template still relied on cmd caret (`^`) line-continuation to split the `powershell -Command` string across three lines inside the `for /f '…'` block. Caret escaping behaves inconsistently inside a single-quoted `for /f` command and could still hand a malformed command to PowerShell. The `Invoke-RestMethod` call is now emitted on one line with no `^` continuations, removing that entire class of cmd-parsing fragility.
+- **Credentials are interpolated as cmd variables instead of `$env:` lookups.** The body now reads `client_id='%CLIENT_ID%';client_secret='%CLIENT_SECRET%';scope='%FULL_SCOPE%'` and the URI is `'%DOMAIN_URL%/oauth2/v1/token'`, so the token fetch no longer depends on the values being inherited as environment variables by the PowerShell child process. The intermediate `TOKEN_URL` cmd variable and the `$body` PowerShell variable were dropped as a result.
+- **Added `-ExecutionPolicy Bypass`** to the `powershell` invocation so the token request runs on machines whose PowerShell execution policy is `Restricted` or `AllSigned`.
+
+### Why this matters
+
+1.0.5 removed the original `+ was unexpected at this time.` parse error, but the wrapper still carried two latent failure modes on Windows: caret line-continuation inside `for /f` that could break under slightly different cmd versions, and a hard dependency on PowerShell inheriting the exported credentials. 1.0.6 makes the generated wrapper a flat, self-contained one-liner that runs regardless of execution policy — so `get_token.py --setup-claude` produces a wrapper that works on a wider range of Windows environments without manual fixes.
+
 ## [1.0.5] — 2026-05-19
 
 ### Fixed — `get_token.py`
