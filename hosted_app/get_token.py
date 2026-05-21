@@ -212,7 +212,7 @@ if "%TOKEN%"=="" (
   exit /b 1
 )
 
-npx -y mcp-remote "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%"
+npx -y mcp-remote "%ENDPOINT_URL%" --header "Authorization: Bearer %TOKEN%" --transport sse
 """
             with open(win_wrapper, "w", newline="\r\n") as f:
                 f.write(cmd_script)
