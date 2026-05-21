@@ -536,9 +536,9 @@ without changing anything.
 Restart Claude Desktop after patching — the running client has already spawned
 the old `mcp-remote` process, so the fix only takes effect on the next launch.
 
-### `SSE stream disconnected: TypeError: terminated` (harmless — ignore)
+### Windows Claude Desktop: `SSE stream disconnected: TypeError: terminated` (harmless — ignore)
 
-You may also see this in the logs:
+On Windows, you may also see this in the logs:
 
 ```text
 [10680] Error from remote server: Error: SSE stream disconnected: TypeError: terminated
