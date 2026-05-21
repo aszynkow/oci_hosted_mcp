@@ -4,6 +4,23 @@ All notable changes to the deployment automation in [hosted_app/](hosted_app/) a
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] — 2026-05-21
+
+### Added — `tools/windows/patch_mcp_remote_win.ps1`, `README.md`
+
+- **New Windows patch script `tools/windows/patch_mcp_remote_win.ps1`.** It locates the globally-installed `mcp-remote` bundle (the largest `chunk-*.js` under `%APPDATA%\npm\node_modules\mcp-remote\dist\`) and inserts a guard that `continue`s past any SSE line whose `event.data` starts with `:`, before that data reaches `JSON.parse`. The script is idempotent — it detects the `event.data.startsWith` marker and exits cleanly if the bundle is already patched — and verifies the edit after writing.
+- **New README *Troubleshooting* section** documenting the Windows-only `mcp-remote` error and the fix:
+  ```text
+  [7764] Error from remote server: SyntaxError: Unexpected token ':', ": ping - 2"... is not valid JSON
+      at JSON.parse (<anonymous>)
+      at processStream (.../mcp-remote/dist/chunk-XXXX.js)
+  ```
+  The section explains the cause, notes the MCP server itself is unaffected (log noise only), and gives the one-line PowerShell invocation to apply the patch.
+
+### Why this matters
+
+Per the SSE spec, lines beginning with `:` are comments — OCI's GenAI Hosted Deployment ingress emits them as keepalive pings (`: ping - N`). On Windows, `mcp-remote`'s `processStream` feeds those comment lines straight into `JSON.parse`, producing a repeating `Unexpected token ':'` error in the Claude Desktop logs. The 1.0.3 server-side change disabled FastMCP's own SSE keepalive, but the platform ingress keepalive still reaches Windows clients, so a client-side fix is needed. The patch script makes `mcp-remote` skip SSE comment lines, clearing the log noise without touching the macOS / Linux path.
+
 ## [1.0.6] — 2026-05-20
 
 ### Fixed — `get_token.py`

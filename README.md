@@ -504,6 +504,38 @@ Auth flow: Claude obtains an OAuth bearer token from the Identity Domain confide
 
 Skill usage: Claude pairs the MCP tools with two Project Skills uploaded to the same Claude Project. The `oci-tenancy-dashboard` skill triggers on phrases like *"show my OCI resources"* or *"scan my tenancy"* — it calls `scan_tenancy` / `get_services_summary` against the MCP server, then renders a dark-themed, sortable, filterable HTML dashboard grouped by service with compartment filter buttons and region tags. The `orcl-docs-search` skill is invoked by the dashboard skill (or directly by the user) to perform live Oracle web-search lookups, resolving each in-use service to its Oracle Architecture Center reference architecture link. Together they turn raw MCP tool output into an interactive, documentation-linked tenancy view inside Claude.
 
+## Troubleshooting
+
+### Windows Claude Desktop: `Unexpected token ':'`
+
+On Windows, Claude Desktop logs may show repeated `mcp-remote` JSON parse noise like:
+
+```text
+[7764] Error from remote server: SyntaxError: Unexpected token ':', ": ping - 2"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at processStream (file:///C:/Users/opc/AppData/Roaming/npm/node_modules/mcp-remote/dist/chunk-65X3S4HB.js:19755:63)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+```
+
+This is a Windows-side `mcp-remote` parsing issue where SSE keepalive comment
+lines such as `: ping - 2` are treated as JSON. The MCP server is still running,
+but the log noise can be confusing.
+
+After installing `mcp-remote` globally, run the Windows patch script from
+PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\windows\patch_mcp_remote_win.ps1
+```
+
+The script patches the installed `mcp-remote` bundle under
+`%APPDATA%\npm\node_modules\mcp-remote\dist\` so SSE comment lines are skipped.
+It is safe to re-run; if the installed package is already patched, it exits
+without changing anything.
+
+Restart Claude Desktop after patching — the running client has already spawned
+the old `mcp-remote` process, so the fix only takes effect on the next launch.
+
 ## Contributing & License
 
 Contributions are welcome. Please open an issue describing the change before sending a pull request, especially for additions to the `RESOURCE_TYPE_TO_SERVICE` map in [container/server.py](container/server.py) (use `get_unknown_resource_types` to surface gaps).
