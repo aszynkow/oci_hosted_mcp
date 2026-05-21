@@ -536,6 +536,56 @@ without changing anything.
 Restart Claude Desktop after patching — the running client has already spawned
 the old `mcp-remote` process, so the fix only takes effect on the next launch.
 
+### `SSE stream disconnected: TypeError: terminated` (harmless — ignore)
+
+You may also see this in the logs:
+
+```text
+[10680] Error from remote server: Error: SSE stream disconnected: TypeError: terminated
+    at processStream (.../mcp-remote/dist/chunk-XXXX.js)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+```
+
+**This is not a real error — it is safe to ignore.** `TypeError: terminated` is
+just Node.js reporting that the server cleanly closed the SSE connection after
+sending its response (the normal end of a request). `mcp-remote` then silently
+reconnects, so the integration keeps working.
+
+What's happening: the server finishes a response and closes the SSE stream
+(intentional). Node emits a `terminated` error on the closed stream, and
+`mcp-remote`'s `catch` block logs it as `SSE stream disconnected` before its
+reconnection logic kicks in:
+
+```javascript
+} catch (error2) {
+  this.onerror?.(new Error(`SSE stream disconnected: ${error2}`)); // ← logs the noise
+  const canResume = isReconnectable || hasPrimingEvent;
+  const needsReconnect = canResume && !receivedResponse;
+  if (needsReconnect && ...) {
+    this._scheduleReconnection(...); // ← reconnects fine
+  }
+}
+```
+
+The bug is that the `catch` treats *every* stream ending as an error — it does
+not distinguish a clean close (server done) from an actual network failure. A
+minimal fix would skip logging when the close is a clean termination:
+
+```javascript
+} catch (error2) {
+  if (!error2?.message?.includes('terminated')) {        // ← only log real errors
+    this.onerror?.(new Error(`SSE stream disconnected: ${error2}`));
+  }
+  // rest unchanged...
+}
+```
+
+**We do not ship a patch for this.** Matching on the `"terminated"` string is
+fragile — a genuine network error can also report `terminated`, and suppressing
+it would silently hide a real failure. The correct fix belongs upstream in
+`mcp-remote` (inspect the stream's close reason rather than the error message),
+so the recommendation here is simply to ignore the log line.
+
 ## Contributing & License
 
 Contributions are welcome. Please open an issue describing the change before sending a pull request, especially for additions to the `RESOURCE_TYPE_TO_SERVICE` map in [container/server.py](container/server.py) (use `get_unknown_resource_types` to surface gaps).
